@@ -25,12 +25,13 @@ struct VadSegment {
 struct VadConfig {
     float threshold = 0.4;
     int sample_rate = 16000;
-    int max_silence_ms = 600; // speech to silence transition time
-    int window_size_ms = 300; // window size for speech detection
-    int min_speech_ms = 250; // silence to speech transition time
-    int max_speech_ms = 10000; // max speech duration per segment
-    int left_padding_ms = 100; // padding for speech start
-    int right_padding_ms = 100; // padding for speech end
+    int speech_window_size_ms = 300;      // window size for speech detection (silence -> speech)
+    int speech_window_threshold_ms = 250; // speech duration threshold within speech window
+    int silence_window_size_ms = 600;     // window size for silence detection (speech -> silence)
+    int silence_window_threshold_ms = 500; // silence duration threshold within silence window
+    int max_speech_ms = 10000;            // max speech duration per segment
+    int left_padding_ms = 100;            // padding for speech start
+    int right_padding_ms = 100;           // padding for speech end
 };
 
 } // namespace VadFilterOnnx

@@ -44,9 +44,9 @@ std::unique_ptr<VadModel> SileroVadModelV4::init(const VadConfig &config) {
     instance->frame_length_ = 512;
 
     int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
-    int ws = (config.window_size_ms + fs_ms - 1) / fs_ms;
-    int wt = (config.min_speech_ms + fs_ms - 1) / fs_ms;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(ws, wt);
+    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
+    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
+    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
 
     instance->reset();
     return instance;
@@ -90,9 +90,9 @@ std::unique_ptr<VadModel> SileroVadModelV5::init(const VadConfig &config) {
     instance->frame_length_ = instance->frame_shift_ + context_size;
 
     int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
-    int ws = (config.window_size_ms + fs_ms - 1) / fs_ms;
-    int wt = (config.min_speech_ms + fs_ms - 1) / fs_ms;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(ws, wt);
+    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
+    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
+    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
 
     instance->reset();
     return instance;

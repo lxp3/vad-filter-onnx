@@ -9,7 +9,7 @@ int main() {
     std::cout << "Testing SlidingWindowBit..." << std::endl;
 
     // Test basic push and get_num_ones
-    SlidingWindowBit sw(10, 5);
+    SlidingWindowBit sw(10);
     sw.push(true);
     sw.push(true);
     sw.push(false);
@@ -53,7 +53,7 @@ int main() {
     assert(sw.num_right_zeros() == 0);
 
     // Test max size limit (64)
-    SlidingWindowBit sw64(100, 50); // Should be capped at 64
+    SlidingWindowBit sw64(100); // Should be capped at 64
     for (int i = 0; i < 100; ++i)
         sw64.push(true);
     assert(sw64.get_num_ones() == 64);

@@ -55,9 +55,10 @@ void VadModel::reset() {
 }
 
 void VadModel::on_voice_start() {
-    // Basic start calculation with padding
+    // Start calculation: current position minus the number of consecutive speech frames
     int padding_samples = (config_.left_padding_ms * config_.sample_rate) / 1000;
     int num_right_ones = window_detector_->num_right_ones();
+
     start_ = current_ - (num_right_ones * frame_shift_) - padding_samples;
     start_ = std::max(last_end_, start_);
 
@@ -69,8 +70,10 @@ void VadModel::on_voice_start() {
 }
 
 void VadModel::on_voice_end() {
+    // End calculation: current position minus the number of consecutive silence frames
     int padding_samples = (config_.right_padding_ms * config_.sample_rate) / 1000;
     int num_right_zeros = window_detector_->num_right_zeros();
+
     end_ = current_ - (num_right_zeros * frame_shift_) + padding_samples;
     end_ = std::min(end_, current_);
 
@@ -92,20 +95,22 @@ void VadModel::on_voice_end() {
 }
 
 void VadModel::update_frame_state(float prob) {
-    bool is_speech = prob > config_.threshold;
-    window_detector_->push(is_speech);
+    bool is_speech_frame = prob > config_.threshold;
+    window_detector_->push(is_speech_frame);
 
-    // std::cout << std::format(
-    //     "current_ {:.3f} s | start_ {:.3f} s | end_ {:.3f} s | prob {:.3f} | is_speech {}\n",
-    //     current_ * 1.0 / config_.sample_rate, start_ * 1.0 / config_.sample_rate,
-    //     end_ * 1.0 / config_.sample_rate, prob, is_speech);
-
+    int fs_ms = 1000 * frame_shift_ / config_.sample_rate;
     if (start_ == -1) {
-        if (window_detector_->is_up()) {
+        // Current state: Silence. Check if we should switch to Speech.
+        int win_size = (config_.speech_window_size_ms + fs_ms - 1) / fs_ms;
+        int threshold = (config_.speech_window_threshold_ms + fs_ms - 1) / fs_ms;
+        if (window_detector_->check_speech(win_size, threshold)) {
             on_voice_start();
         }
     } else {
-        if (window_detector_->is_down()) {
+        // Current state: Speech. Check if we should switch to Silence.
+        int win_size = (config_.silence_window_size_ms + fs_ms - 1) / fs_ms;
+        int threshold = (config_.silence_window_threshold_ms + fs_ms - 1) / fs_ms;
+        if (window_detector_->check_silence(win_size, threshold)) {
             on_voice_end();
         }
     }

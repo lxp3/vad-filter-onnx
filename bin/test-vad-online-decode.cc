@@ -23,9 +23,10 @@ static void print_usage(char **argv) {
     fprintf(stderr, "  --sample-rate RATE    target sample rate (default: 16000)\n");
     fprintf(stderr, "  --threshold THR       VAD threshold (default: 0.4)\n");
     fprintf(stderr, "  --chunk-size-ms MS    chunk size in milliseconds (default: 100)\n");
-    fprintf(stderr, "  --max-silence-ms MS   max silence duration in milliseconds (default: 600)\n");
-    fprintf(stderr, "  --window-size-ms MS   window size in milliseconds (default: 300)\n");
-    fprintf(stderr, "  --min-speech-ms MS    min speech duration in milliseconds (default: 250)\n");
+    fprintf(stderr, "  --speech-win-size-ms MS   speech detection window size (default: 300)\n");
+    fprintf(stderr, "  --speech-win-thr-ms MS    speech detection threshold (default: 250)\n");
+    fprintf(stderr, "  --silence-win-size-ms MS  silence detection window size (default: 600)\n");
+    fprintf(stderr, "  --silence-win-thr-ms MS   silence detection threshold (default: 500)\n");
     fprintf(stderr, "  --max-speech-ms MS    max speech duration in milliseconds (default: 10000)\n");
     fprintf(stderr, "  --left-padding-ms MS  left padding in milliseconds (default: 100)\n");
     fprintf(stderr, "  --right-padding-ms MS right padding in milliseconds (default: 100)\n");
@@ -48,12 +49,14 @@ static void parse_args(int argc, char **argv, std::string &model_path, std::stri
             config.threshold = std::stof(argv[++i]);
         } else if (arg == "--chunk-size-ms" && i + 1 < argc) {
             chunk_size_ms = std::stoi(argv[++i]);
-        } else if (arg == "--max-silence-ms" && i + 1 < argc) {
-            config.max_silence_ms = std::stoi(argv[++i]);
-        } else if (arg == "--window-size-ms" && i + 1 < argc) {
-            config.window_size_ms = std::stoi(argv[++i]);
-        } else if (arg == "--min-speech-ms" && i + 1 < argc) {
-            config.min_speech_ms = std::stoi(argv[++i]);
+        } else if (arg == "--speech-win-size-ms" && i + 1 < argc) {
+            config.speech_window_size_ms = std::stoi(argv[++i]);
+        } else if (arg == "--speech-win-thr-ms" && i + 1 < argc) {
+            config.speech_window_threshold_ms = std::stoi(argv[++i]);
+        } else if (arg == "--silence-win-size-ms" && i + 1 < argc) {
+            config.silence_window_size_ms = std::stoi(argv[++i]);
+        } else if (arg == "--silence-win-thr-ms" && i + 1 < argc) {
+            config.silence_window_threshold_ms = std::stoi(argv[++i]);
         } else if (arg == "--max-speech-ms" && i + 1 < argc) {
             config.max_speech_ms = std::stoi(argv[++i]);
         } else if (arg == "--left-padding-ms" && i + 1 < argc) {

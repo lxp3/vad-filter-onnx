@@ -21,11 +21,6 @@ class VadModel {
     // Create a new independent instance for inference sharing resources from this handle
     virtual std::unique_ptr<VadModel> init(const VadConfig &config) = 0;
 
-    int get_sample_rate() const { return config_.sample_rate; }
-    int get_frame_length_ms() const { return 1000 * frame_length_ / config_.sample_rate; }
-    int get_frame_shift_ms() const { return 1000 * frame_shift_ / config_.sample_rate; }
-    VadType get_vad_type() const { return type_; }
-
     virtual std::vector<VadSegment> decode(float *data, int n, bool input_finished);
     void flush();
     void reset();

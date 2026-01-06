@@ -10,8 +10,7 @@ namespace VadFilterOnnx {
 
 class SlidingWindowBit {
   public:
-    SlidingWindowBit(size_t max_size, size_t threshold = 0)
-        : window(0), threshold(threshold), current_size(0) {
+    SlidingWindowBit(size_t max_size) : window(0), current_size(0) {
         if (max_size > 64) {
             std::cerr << "Warning: SlidingWindowBit max_size (" << max_size
                       << ") exceeds 64. Capping to 64." << std::endl;
@@ -28,6 +27,33 @@ class SlidingWindowBit {
         if (current_size < max_size) {
             current_size++;
         }
+    }
+
+    /**
+     * @brief Check if speech is detected within a given window size and threshold.
+     * @param win_size The window size to check (must be <= max_size).
+     * @param threshold The number of frames that must be speech to trigger detection.
+     */
+    bool check_speech(size_t win_size, size_t threshold) const {
+        if (current_size < win_size)
+            return false;
+        uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
+        uint64_t sub_window = window & sub_mask;
+        return std::popcount(sub_window) >= threshold;
+    }
+
+    /**
+     * @brief Check if silence is detected within a given window size and threshold.
+     * @param win_size The window size to check (must be <= max_size).
+     * @param threshold The number of frames that must be silence to trigger detection.
+     */
+    bool check_silence(size_t win_size, size_t threshold) const {
+        if (current_size < win_size)
+            return false;
+        uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
+        uint64_t sub_window = window & sub_mask;
+        size_t num_zeros = win_size - std::popcount(sub_window);
+        return num_zeros >= threshold;
     }
 
     // 统计 1 的数量 (O(1))
@@ -75,10 +101,6 @@ class SlidingWindowBit {
         return std::countl_one(reversed_window);
     }
 
-    // --- 状态判断 ---
-    bool is_up() const { return get_num_ones() > threshold; }
-    bool is_down() const { return get_num_zeros() > threshold; }
-
     void reset() {
         window = 0;
         current_size = 0;
@@ -99,7 +121,6 @@ class SlidingWindowBit {
     uint64_t window;
     uint64_t mask;
     size_t max_size;
-    size_t threshold;
     size_t current_size;
 };
 

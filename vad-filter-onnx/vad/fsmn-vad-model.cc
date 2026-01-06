@@ -30,10 +30,12 @@ std::unique_ptr<VadModel> FsmnVadModel::init(const VadConfig &config) {
     instance->frame_shift_ = frame_shift_ms_ * (config.sample_rate / 1000);
     instance->frame_length_ = frame_length_ms_ * (config.sample_rate / 1000);
 
-    // Window detector operates on the 10ms frame shift
-    int window_size = (config.window_size_ms + frame_shift_ms_ - 1) / frame_shift_ms_;
-    int window_threshold = (config.min_speech_ms + frame_shift_ms_ - 1) / frame_shift_ms_;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size, window_threshold);
+    // Window detector operates on the 10ms frame shift.
+    // The buffer size must be at least as large as the largest window.
+    int fs_ms = 10;
+    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
+    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
+    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
 
     instance->reset();
     return instance;
