@@ -3,6 +3,8 @@
 #include "vad/vad-model.h"
 #include <vector>
 
+namespace VadFilterOnnx {
+
 bool is_silero_vad_v4(const std::vector<const char *> &input_names,
                       const std::vector<const char *> &output_names);
 bool is_silero_vad_v5(const std::vector<const char *> &input_names,
@@ -36,3 +38,5 @@ class SileroVadModelV5 : public VadModel {
     static constexpr std::array<int64_t, 3> shape_{ 2, 1, 128 };
     Ort::Value state_{ nullptr };
 };
+
+} // namespace VadFilterOnnx

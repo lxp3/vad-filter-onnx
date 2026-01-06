@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 
+using namespace VadFilterOnnx;
+
 int main() {
     std::cout << "Testing SlidingWindowBit..." << std::endl;
 

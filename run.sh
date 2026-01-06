@@ -15,7 +15,7 @@ if [ ${stage} -eq -1 ]; then
     ${wav_path}
 fi
 
-# silero_vad_v4_onnx_path="public/silero_vad.v4.onnx"
+silero_vad_v4_onnx_path="public/silero_vad.v4.onnx"
 fsmn_vad_onnx_path="public/fsmn_vad.16k.onnx"
 if [ ${stage} -eq 0 ]; then
     echo "Testing FSMN VAD model..."
@@ -24,5 +24,6 @@ if [ ${stage} -eq 0 ]; then
         --wav-path ${wav_path} \
         --sample-rate 16000 \
         --threshold 0.6 \
-        --chunk-size-ms 100
+        --chunk-size-ms 100 \
+        --max-speech-ms 5000
 fi

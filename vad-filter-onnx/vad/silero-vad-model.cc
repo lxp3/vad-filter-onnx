@@ -1,5 +1,8 @@
 #include "vad/silero-vad-model.h"
 #include "utils/onnx-common.h"
+#include <string_view>
+
+namespace VadFilterOnnx {
 
 bool is_silero_vad_v4(const std::vector<const char *> &input_names,
                       const std::vector<const char *> &output_names) {
@@ -113,3 +116,4 @@ float SileroVadModelV5::forward(float *data, int n) {
     float prob = out[0].GetTensorData<float>()[0];
     return prob;
 }
+} // namespace VadFilterOnnx

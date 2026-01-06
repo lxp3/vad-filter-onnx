@@ -7,10 +7,13 @@
 #include <string>
 #include <vector>
 
+namespace VadFilterOnnx {
+
 class VadModel {
   public:
     // Factory method to load shared resources (Handle)
-    static std::unique_ptr<VadModel> create(const std::string &path, int device_id = -1);
+    static std::unique_ptr<VadModel> create(const std::string &path, int num_threads = 1,
+                                            int device_id = -1);
 
     VadModel() = default;
     virtual ~VadModel() = default;
@@ -56,3 +59,5 @@ class VadModel {
     std::vector<VadSegment> segs_;
     std::vector<float> reminder_;
 };
+
+} // namespace VadFilterOnnx

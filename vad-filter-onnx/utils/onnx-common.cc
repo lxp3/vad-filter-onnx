@@ -2,6 +2,8 @@
 #include <format>
 #include <sstream>
 
+namespace VadFilterOnnx {
+
 Ort::Env &GetOrtEnv() {
     static Ort::Env env{ nullptr };
     if (!env) {
@@ -118,3 +120,4 @@ std::string LookupCustomModelMetaData(const Ort::ModelMetadata &meta_data, const
     return ans;
 #endif
 }
+} // namespace VadFilterOnnx

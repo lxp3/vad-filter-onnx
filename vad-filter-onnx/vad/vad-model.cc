@@ -5,8 +5,11 @@
 // #include <format>
 // #include <iostream>
 
-std::unique_ptr<VadModel> VadModel::create(const std::string &path, int device_id) {
-    std::shared_ptr<Ort::Session> session = ReadOnnx(path, 1, device_id);
+namespace VadFilterOnnx {
+
+std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_threads,
+                                           int device_id) {
+    std::shared_ptr<Ort::Session> session = ReadOnnx(path, num_threads, device_id);
     std::vector<const char *> input_names, output_names;
     GetInputOutputInfo(session, input_names, output_names);
 
@@ -167,12 +170,6 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
         } else {
             reminder_.clear();
         }
-
-        // For online/streaming: if speech is active but no boundary event
-        // occurred in this call, report it as a partial segment.
-        if (start_ != -1 && segs_.empty()) {
-            segs_.emplace_back(seg_idx_, start_, -1, (start_ * 1000) / config_.sample_rate, -1);
-        }
     }
 
     // Move collected segments to result and clear local cache
@@ -180,3 +177,4 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
     segs_.clear();
     return result_segments;
 }
+} // namespace VadFilterOnnx

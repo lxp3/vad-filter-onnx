@@ -6,6 +6,8 @@
 #include <iostream>
 #include <string>
 
+namespace VadFilterOnnx {
+
 class SlidingWindowBit {
   public:
     SlidingWindowBit(size_t max_size, size_t threshold = 0)
@@ -55,7 +57,7 @@ class SlidingWindowBit {
         return std::countr_zero(~window);
     }
 
-    // 从左侧（最旧进入的一侧）数连续的 0
+    // 从左侧（最旧进入的一侧）数连续 of 0
     size_t num_left_zeros() const {
         if (current_size == 0)
             return 0;
@@ -100,3 +102,5 @@ class SlidingWindowBit {
     size_t threshold;
     size_t current_size;
 };
+
+} // namespace VadFilterOnnx

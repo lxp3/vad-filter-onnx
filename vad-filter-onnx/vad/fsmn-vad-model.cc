@@ -3,11 +3,18 @@
 #include <algorithm>
 #include <string_view>
 
+namespace VadFilterOnnx {
+
 bool is_fsmn_vad(const std::vector<const char *> &input_names,
                  const std::vector<const char *> &output_names) {
     if (input_names.size() == 7 && output_names.size() == 5 &&
         std::string_view(input_names[0]) == "speech" &&
         std::string_view(input_names[1]) == "in_cache0" &&
+        std::string_view(input_names[2]) == "in_cache1" &&
+        std::string_view(input_names[3]) == "in_cache2" &&
+        std::string_view(input_names[4]) == "in_cache3" &&
+        std::string_view(input_names[5]) == "first_padding" &&
+        std::string_view(input_names[6]) == "last_padding" &&
         std::string_view(output_names[0]) == "logits") {
         return true;
     }
@@ -89,6 +96,23 @@ std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t firs
     return speech_probs;
 }
 
+void FsmnVadModel::process_logits(const std::vector<float> &logits, int limit) {
+    int n = (limit == -1) ? static_cast<int>(logits.size()) : limit;
+    for (int i = 0; i < n; ++i) {
+        float p = logits[i];
+        update_frame_state(p);
+        current_ += frame_shift_;
+
+        if (start_ != -1) {
+            int max_samples = (config_.max_speech_ms * config_.sample_rate) / 1000;
+            if (current_ - start_ > max_samples) {
+                on_voice_end();
+                on_voice_start();
+            }
+        }
+    }
+}
+
 std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_finished) {
     // 1. Accumulate all new data into reminder buffer to ensure no data loss
     if (n > 0) {
@@ -142,10 +166,7 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
 
         if (input_finished) {
             // Process all results if audio ends here
-            for (float p : logits) {
-                update_frame_state(p);
-                current_ += fs;
-            }
+            process_logits(logits);
             flush();
             reminder_.clear();
         } else {
@@ -153,10 +174,7 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
             // logits.size() = N_real + 2 - 4 = N_real - 2.
             // num_to_consume = logits.size() - 2.
             int num_to_consume = std::max(0, static_cast<int>(logits.size()) - 2);
-            for (int i = 0; i < num_to_consume; ++i) {
-                update_frame_state(logits[i]);
-                current_ += fs;
-            }
+            process_logits(logits, num_to_consume);
             // Erase only consumed samples; all others remain in reminder_
             reminder_.erase(reminder_.begin(), reminder_.begin() + (num_to_consume * fs));
         }
@@ -167,10 +185,7 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
                 forward_frames(reminder_.data(), static_cast<int>(reminder_.size()), 0, 0);
 
             // Consume all produced scores (N_real - 4), leaving the required 55ms context
-            for (float p : logits) {
-                update_frame_state(p);
-                current_ += fs;
-            }
+            process_logits(logits);
             // Precise erasure: keeps exactly the last 4 frames + any sub-frame remainder
             reminder_.erase(reminder_.begin(), reminder_.begin() + (logits.size() * fs));
         }
@@ -179,10 +194,7 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
         if (!reminder_.empty()) {
             auto logits =
                 forward_frames(reminder_.data(), static_cast<int>(reminder_.size()), 0, 2);
-            for (float p : logits) {
-                update_frame_state(p);
-                current_ += fs;
-            }
+            process_logits(logits);
         }
         flush();
         reminder_.clear();
@@ -192,3 +204,4 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
     segs_.clear();
     return result;
 }
+} // namespace VadFilterOnnx

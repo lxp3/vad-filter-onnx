@@ -8,8 +8,11 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
-#include "vad/vad-model.h"
+#include <format>
+#include "vad-filter-onnx-cxx-api.h"
 #include "vad-config.h"
+
+using namespace VadFilterOnnx;
 
 struct Args {
     std::string model_path;
@@ -17,6 +20,7 @@ struct Args {
     int sample_rate = 16000;
     float threshold = 0.4f;
     int chunk_size_ms = 100;
+    int max_speech_ms = 10000;
 };
 
 static void print_usage(char **argv) {
@@ -28,6 +32,7 @@ static void print_usage(char **argv) {
     fprintf(stderr, "  --sample-rate RATE    target sample rate (default: 16000)\n");
     fprintf(stderr, "  --threshold THR       VAD threshold (default: 0.4)\n");
     fprintf(stderr, "  --chunk-size-ms MS    chunk size in milliseconds (default: 100)\n");
+    fprintf(stderr, "  --max-speech-ms MS    max speech duration in milliseconds (default: 10000)\n");
 }
 
 static void parse_args(int argc, char **argv, Args &args) {
@@ -46,6 +51,8 @@ static void parse_args(int argc, char **argv, Args &args) {
             args.threshold = std::stof(argv[++i]);
         } else if (arg == "--chunk-size-ms" && i + 1 < argc) {
             args.chunk_size_ms = std::stoi(argv[++i]);
+        } else if (arg == "--max-speech-ms" && i + 1 < argc) {
+            args.max_speech_ms = std::stoi(argv[++i]);
         } else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage(argv);
@@ -97,16 +104,17 @@ int main(int argc, char* argv[]) {
     VadConfig config;
     config.sample_rate = args.sample_rate;
     config.threshold = args.threshold;
+    config.max_speech_ms = args.max_speech_ms;
 
-    // 1. Create model handle (shared resources)
-    std::unique_ptr<VadModel> handle = VadModel::create(args.model_path);
+    // 1. Create model handle (shared resources) using AutoVadModel API
+    std::unique_ptr<AutoVadModel> handle = AutoVadModel::create(args.model_path);
     if (!handle) {
         std::cerr << "Failed to create VAD model handle" << std::endl;
         return 1;
     }
 
     // 2. Init an instance for inference
-    std::unique_ptr<VadModel> model = handle->init(config);
+    std::unique_ptr<AutoVadModel> model = handle->init(config);
     if (!model) {
         std::cerr << "Failed to init VAD model instance" << std::endl;
         return 1;
@@ -115,17 +123,22 @@ int main(int argc, char* argv[]) {
     int chunk_size = (args.sample_rate * args.chunk_size_ms) / 1000;
     int total_samples = samples.size();
     
-    std::cout << "Starting VAD online decoding simulation..." << std::endl;
+    std::cout << "Starting VAD online decoding simulation using AutoVadModel..." << std::endl;
     for (int i = 0; i < total_samples; i += chunk_size) {
         int n = std::min(chunk_size, total_samples - i);
         bool last = (i + n >= total_samples);
-        printf("Processing chunk %d of %d samples, last: %d\n", i, total_samples, last);
+        // printf("Processing chunk %d of %d samples, last: %d\n", i, total_samples, last);
         
         // Simulating online/streaming data input
         std::vector<VadSegment> segments = model->decode(samples.data() + i, n, last);
         for (const auto& seg : segments) {
-            printf("[VadSegment] idx %d | start %d | end %d | start_ms %d | end_ms %d\n",
-                   seg.idx, seg.start, seg.end, seg.start_ms, seg.end_ms);
+            std::string msg = std::format("[VadSegment] idx {} | start_ms {} | end_ms {}",
+                                          seg.idx, seg.start_ms, seg.end_ms);
+            if (seg.end > 0) {
+                auto duration = seg.end_ms - seg.start_ms;
+                msg += std::format(" | duration {} ms", duration);
+            }
+            std::cout << msg << std::endl;
         }
     }
 
