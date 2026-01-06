@@ -1,5 +1,6 @@
 build/
-scripts/
+__pycache__
+debug/
 deprecated/
 .cursor/
 *.o
