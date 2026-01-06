@@ -22,7 +22,7 @@ class VadModel {
     virtual std::unique_ptr<VadModel> init(const VadConfig &config) = 0;
 
     virtual std::vector<VadSegment> decode(float *data, int n, bool input_finished);
-    void flush();
+    VadSegment flush();
     void reset();
 
   protected:

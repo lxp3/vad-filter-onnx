@@ -39,7 +39,7 @@ public:
     std::vector<VadSegment> decode(float *data, int n, bool input_finished);
 
     void reset();
-    void flush();
+    VadSegment flush();
 
     ~AutoVadModel();
 

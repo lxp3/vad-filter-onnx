@@ -116,10 +116,14 @@ void VadModel::update_frame_state(float prob) {
     }
 }
 
-void VadModel::flush() {
+VadSegment VadModel::flush() {
     if (start_ != -1) {
         on_voice_end();
+        if (!segs_.empty()) {
+            return segs_.back();
+        }
     }
+    return VadSegment();
 }
 
 std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished) {

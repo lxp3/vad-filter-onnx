@@ -60,10 +60,11 @@ void AutoVadModel::reset() {
     }
 }
 
-void AutoVadModel::flush() {
+VadSegment AutoVadModel::flush() {
     if (impl_->internal_model_) {
-        impl_->internal_model_->flush();
+        return impl_->internal_model_->flush();
     }
+    return VadSegment();
 }
 
 } // namespace VadFilterOnnx
