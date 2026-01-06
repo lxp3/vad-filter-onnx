@@ -13,3 +13,8 @@ include(onnxruntime)
 # Add subdirectories
 add_subdirectory(vad-filter-onnx)
 
+# Binaries
+add_executable(test-vad-online-decode bin/test-vad-online-decode.cc)
+target_link_libraries(test-vad-online-decode PRIVATE voice_filter_onnx)
+target_include_directories(test-vad-online-decode PRIVATE include)
+

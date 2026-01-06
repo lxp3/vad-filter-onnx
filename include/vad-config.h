@@ -28,8 +28,4 @@ struct VadConfig {
     int max_speech_ms = 10000;
     int left_padding_ms = 100;
     int right_padding_ms = 100;
-<<<<<<< HEAD
 };
-=======
-};
->>>>>>> dbc5f0b83d32c046afc13174a5ce1e77e23094ed

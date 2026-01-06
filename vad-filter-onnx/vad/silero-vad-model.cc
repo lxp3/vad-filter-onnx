@@ -25,9 +25,6 @@ bool is_silero_vad_v5(const std::vector<const char *> &input_names,
     return false;
 }
 
-SileroVadModelV4::SileroVadModelV4(const VadModel &other, const VadConfig &config)
-    : VadModel(other, config) {}
-
 void SileroVadModelV4::init_state() {
     if (h_state_ == nullptr) {
         h_state_ = Ort::Value::CreateTensor<float>(allocator_, shape_.data(), shape_.size());
@@ -35,6 +32,21 @@ void SileroVadModelV4::init_state() {
     }
     Fill<float>(&h_state_, 0.0f);
     Fill<float>(&c_state_, 0.0f);
+}
+
+std::unique_ptr<VadModel> SileroVadModelV4::init(const VadConfig &config) {
+    auto instance = std::make_unique<SileroVadModelV4>(static_cast<const VadModel &>(*this));
+    instance->config_ = config;
+    instance->frame_shift_ = 512;
+    instance->frame_length_ = 512;
+
+    int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
+    int ws = (config.window_size_ms + fs_ms - 1) / fs_ms;
+    int wt = (config.min_speech_ms + fs_ms - 1) / fs_ms;
+    instance->window_detector_ = std::make_unique<SlidingWindowBit>(ws, wt);
+
+    instance->reset();
+    return instance;
 }
 
 float SileroVadModelV4::forward(float *data, int n) {
@@ -60,14 +72,27 @@ float SileroVadModelV4::forward(float *data, int n) {
 
 /* SileroVadModelV5 Implementation */
 
-SileroVadModelV5::SileroVadModelV5(const VadModel &other, const VadConfig &config)
-    : VadModel(other, config) {}
-
 void SileroVadModelV5::init_state() {
     if (state_ == nullptr) {
         state_ = Ort::Value::CreateTensor<float>(allocator_, shape_.data(), shape_.size());
     }
     Fill<float>(&state_, 0.0f);
+}
+
+std::unique_ptr<VadModel> SileroVadModelV5::init(const VadConfig &config) {
+    auto instance = std::make_unique<SileroVadModelV5>(static_cast<const VadModel &>(*this));
+    instance->config_ = config;
+    instance->frame_shift_ = (config.sample_rate == 8000 ? 256 : 512);
+    int context_size = (config.sample_rate == 8000 ? 32 : 64);
+    instance->frame_length_ = instance->frame_shift_ + context_size;
+
+    int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
+    int ws = (config.window_size_ms + fs_ms - 1) / fs_ms;
+    int wt = (config.min_speech_ms + fs_ms - 1) / fs_ms;
+    instance->window_detector_ = std::make_unique<SlidingWindowBit>(ws, wt);
+
+    instance->reset();
+    return instance;
 }
 
 float SileroVadModelV5::forward(float *data, int n) {

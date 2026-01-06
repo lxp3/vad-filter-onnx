@@ -2,8 +2,13 @@ build/
 scripts/
 deprecated/
 .cursor/
-downloads/
 *.o
 *.a
 *.so
 *.swp
+*.zip
+*.bak
+log.txt
+*.log
+*.wav
+*.mp3

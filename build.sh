@@ -14,6 +14,6 @@ find vad-filter-onnx -type f \( -name "*.cc" -o -name "*.h" \) -exec ./clang-for
 build_dir=build
 cmake -S . -B ${build_dir} \
     -DCMAKE_BUILD_TYPE=release \
-    -DONNXRUNTIME_FILE=./downloads/onnxruntime-linux-x64-gpu-1.17.1-patched.zip
+    -DONNXRUNTIME_FILE=./public/onnxruntime-linux-x64-gpu-1.17.1-patched.zip
 cmake --build ${build_dir} -j16 
 # cd build && make  -j16 # VERBOSE=1
