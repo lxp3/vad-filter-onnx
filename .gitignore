@@ -1,0 +1,9 @@
+build/
+scripts/
+deprecated/
+.cursor/
+downloads/
+*.o
+*.a
+*.so
+*.swp
