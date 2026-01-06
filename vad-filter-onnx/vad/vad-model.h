@@ -23,7 +23,7 @@ class VadModel {
     int get_frame_shift_ms() const { return 1000 * frame_shift_ / config_.sample_rate; }
     VadType get_vad_type() const { return type_; }
 
-    std::vector<VadSegment> decode(float *data, int n, bool input_finished);
+    virtual std::vector<VadSegment> decode(float *data, int n, bool input_finished);
     void flush();
     void reset();
 
