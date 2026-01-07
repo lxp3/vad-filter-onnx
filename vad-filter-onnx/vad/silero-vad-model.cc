@@ -20,7 +20,7 @@ bool is_silero_vad_v5(const std::vector<const char *> &input_names,
                       const std::vector<const char *> &output_names) {
     if (input_names.size() == 3 && output_names.size() == 2 &&
         std::string_view(input_names[0]) == "input" &&
-        std::string_view(input_names[1]) == "state" && std::string_view(input_names[2]) == "sr" &&
+        std::string_view(input_names[1]) == "state" &&
         std::string_view(output_names[0]) == "output" &&
         std::string_view(output_names[1]) == "stateN") {
         return true;
@@ -76,9 +76,10 @@ void SileroVadModelV5::init_state() {
 
 std::unique_ptr<VadModel> SileroVadModelV5::init(const VadConfig &config) {
     // Silero V5: shift is 256/512, length adds context (32/64)
-    int shift = (config.sample_rate == 8000 ? 256 : 512);
-    int length = shift + (config.sample_rate == 8000 ? 32 : 64);
-    auto instance = std::make_unique<SileroVadModelV5>(*this, config, shift, length);
+    int frame_shift = (config.sample_rate == 8000 ? 256 : 512);
+    int context_size = (config.sample_rate == 8000 ? 32 : 64);
+    int frame_length = frame_shift + context_size;
+    auto instance = std::make_unique<SileroVadModelV5>(*this, config, frame_shift, frame_length);
     instance->reset();
     return instance;
 }
@@ -88,11 +89,21 @@ float SileroVadModelV5::forward(float *data, int n) {
     std::array<int64_t, 2> x_shape = { 1, n };
     Ort::Value x = Ort::Value::CreateTensor(memory_info, data, n, x_shape.data(), x_shape.size());
 
-    int64_t sr_shape = 1;
-    int64_t sample_rate = static_cast<int64_t>(config_.sample_rate);
-    Ort::Value sr = Ort::Value::CreateTensor(memory_info, &sample_rate, 1, &sr_shape, 1);
+    // 使用 vector 替代 array，解决 Ort::Value 无法默认构造的问题
+    std::vector<Ort::Value> inputs;
+    inputs.reserve(input_names_.size());
 
-    std::array<Ort::Value, 3> inputs = { std::move(x), std::move(state_), std::move(sr) };
+    // 基础输入：input 和 state
+    inputs.push_back(std::move(x));
+    inputs.push_back(std::move(state_));
+
+    // 如果模型需要采样率输入 (size 为 3)
+    if (input_names_.size() > 2) {
+        int64_t sr_shape = 1;
+        int64_t sample_rate = static_cast<int64_t>(config_.sample_rate);
+        Ort::Value sr = Ort::Value::CreateTensor(memory_info, &sample_rate, 1, &sr_shape, 1);
+        inputs.push_back(std::move(sr));
+    }
 
     auto out = session_->Run(Ort::RunOptions{ nullptr }, input_names_.data(), inputs.data(),
                              inputs.size(), output_names_.data(), output_names_.size());
@@ -101,4 +112,5 @@ float SileroVadModelV5::forward(float *data, int n) {
     float prob = out[0].GetTensorData<float>()[0];
     return prob;
 }
+
 } // namespace VadFilterOnnx

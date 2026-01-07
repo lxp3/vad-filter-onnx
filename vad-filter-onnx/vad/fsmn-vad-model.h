@@ -16,6 +16,7 @@ class FsmnVadModel : public VadModel {
 
     std::unique_ptr<VadModel> init(const VadConfig &config) override;
     void init_state() override;
+    // empty forward implementation for FSMN VAD
     float forward(float *data, int n) override { return 0.0f; };
     std::vector<VadSegment> decode(float *data, int n, bool input_finished) override;
 

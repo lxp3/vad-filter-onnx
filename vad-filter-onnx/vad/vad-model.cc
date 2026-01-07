@@ -81,10 +81,12 @@ void VadModel::reset() {
 
 void VadModel::on_voice_start() {
     // Precise start: current - consecutive speech frames - padding
-    int speech_frames = static_cast<int>(window_detector_->num_right_ones());
-    start_ = current_ - (speech_frames * frame_shift_) - left_padding_samples_;
+    int lookback_speech_frames = window_detector_->num_right_ones();
+    int lookback_speech_samples = lookback_speech_frames * frame_shift_;
+    start_ = current_ - lookback_speech_samples - left_padding_samples_;
     start_ = std::max(last_end_, start_);
 
+    // setup start segment
     VadSegment seg;
     seg.idx = seg_idx_;
     seg.start = start_;
@@ -94,8 +96,9 @@ void VadModel::on_voice_start() {
 
 void VadModel::on_voice_end() {
     // Precise end: current - consecutive silence frames + padding
-    int silence_frames = static_cast<int>(window_detector_->num_right_zeros());
-    end_ = current_ - (silence_frames * frame_shift_) + right_padding_samples_;
+    int lookback_silence_frames = window_detector_->num_right_zeros();
+    int lookback_silence_samples = lookback_silence_frames * frame_shift_;
+    end_ = current_ - lookback_silence_samples + right_padding_samples_;
     end_ = std::min(end_, current_);
 
     // If on_voice_start was called in the same decode() call, segs_ already has a partial segment.
