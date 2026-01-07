@@ -38,11 +38,36 @@ std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_thre
     return model;
 }
 
-VadModel::VadModel(const VadModel &other)
+VadModel::VadModel(const VadModel &other, const VadConfig &config, int frame_shift,
+                   int frame_length)
     : type_(other.type_),
+      config_(config),
       session_(other.session_),
       input_names_(other.input_names_),
-      output_names_(other.output_names_) {}
+      output_names_(other.output_names_),
+      frame_length_(frame_length),
+      frame_shift_(frame_shift) {
+
+    samples_per_ms_ = config.sample_rate / 1000;
+    int frame_shift_ms = frame_shift / samples_per_ms_;
+    speech_window_size_frames_ =
+        (config.speech_window_size_ms + frame_shift_ms - 1) / frame_shift_ms;
+    speech_window_threshold_frames_ =
+        (config.speech_window_threshold_ms + frame_shift_ms - 1) / frame_shift_ms;
+    silence_window_size_frames_ =
+        (config.silence_window_size_ms + frame_shift_ms - 1) / frame_shift_ms;
+    silence_window_threshold_frames_ =
+        (config.silence_window_threshold_ms + frame_shift_ms - 1) / frame_shift_ms;
+
+    // Convert padding to samples
+    left_padding_samples_ = config.left_padding_ms * samples_per_ms_;
+    right_padding_samples_ = config.right_padding_ms * samples_per_ms_;
+    max_speech_samples_ = config.max_speech_ms * samples_per_ms_;
+
+    // Initialize window detector with the maximum required window size
+    int max_win_frames = std::max(speech_window_size_frames_, silence_window_size_frames_);
+    window_detector_ = std::make_unique<SlidingWindowBit>(max_win_frames);
+}
 
 void VadModel::reset() {
     init_state();
@@ -55,37 +80,33 @@ void VadModel::reset() {
 }
 
 void VadModel::on_voice_start() {
-    // Start calculation: current position minus the number of consecutive speech frames
-    int padding_samples = (config_.left_padding_ms * config_.sample_rate) / 1000;
-    int num_right_ones = window_detector_->num_right_ones();
-
-    start_ = current_ - (num_right_ones * frame_shift_) - padding_samples;
+    // Precise start: current - consecutive speech frames - padding
+    int speech_frames = static_cast<int>(window_detector_->num_right_ones());
+    start_ = current_ - (speech_frames * frame_shift_) - left_padding_samples_;
     start_ = std::max(last_end_, start_);
 
     VadSegment seg;
     seg.idx = seg_idx_;
     seg.start = start_;
-    seg.start_ms = (start_ * 1000) / config_.sample_rate;
+    seg.start_ms = start_ / samples_per_ms_;
     segs_.push_back(seg);
 }
 
 void VadModel::on_voice_end() {
-    // End calculation: current position minus the number of consecutive silence frames
-    int padding_samples = (config_.right_padding_ms * config_.sample_rate) / 1000;
-    int num_right_zeros = window_detector_->num_right_zeros();
-
-    end_ = current_ - (num_right_zeros * frame_shift_) + padding_samples;
+    // Precise end: current - consecutive silence frames + padding
+    int silence_frames = static_cast<int>(window_detector_->num_right_zeros());
+    end_ = current_ - (silence_frames * frame_shift_) + right_padding_samples_;
     end_ = std::min(end_, current_);
 
     // If on_voice_start was called in the same decode() call, segs_ already has a partial segment.
     if (!segs_.empty() && segs_.back().end == -1) {
         auto &last_seg = segs_.back();
         last_seg.end = end_;
-        last_seg.end_ms = (end_ * 1000) / config_.sample_rate;
+        last_seg.end_ms = end_ / samples_per_ms_;
     } else {
         // Speech started in a previous decode() call, need to add the finished segment.
-        segs_.emplace_back(seg_idx_, start_, end_, (start_ * 1000) / config_.sample_rate,
-                           (end_ * 1000) / config_.sample_rate);
+        segs_.emplace_back(seg_idx_, start_, end_, start_ / samples_per_ms_,
+                           end_ / samples_per_ms_);
     }
 
     last_end_ = end_;
@@ -98,19 +119,16 @@ void VadModel::update_frame_state(float prob) {
     bool is_speech_frame = prob > config_.threshold;
     window_detector_->push(is_speech_frame);
 
-    int fs_ms = 1000 * frame_shift_ / config_.sample_rate;
     if (start_ == -1) {
         // Current state: Silence. Check if we should switch to Speech.
-        int win_size = (config_.speech_window_size_ms + fs_ms - 1) / fs_ms;
-        int threshold = (config_.speech_window_threshold_ms + fs_ms - 1) / fs_ms;
-        if (window_detector_->check_speech(win_size, threshold)) {
+        if (window_detector_->check_speech(speech_window_size_frames_,
+                                           speech_window_threshold_frames_)) {
             on_voice_start();
         }
     } else {
         // Current state: Speech. Check if we should switch to Silence.
-        int win_size = (config_.silence_window_size_ms + fs_ms - 1) / fs_ms;
-        int threshold = (config_.silence_window_threshold_ms + fs_ms - 1) / fs_ms;
-        if (window_detector_->check_silence(win_size, threshold)) {
+        if (window_detector_->check_silence(silence_window_size_frames_,
+                                            silence_window_threshold_frames_)) {
             on_voice_end();
         }
     }
@@ -149,8 +167,7 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
 
         // Check if current speech segment exceeds maximum allowed duration
         if (start_ != -1) {
-            int max_samples = (config_.max_speech_ms * config_.sample_rate) / 1000;
-            if (current_ - start_ > max_samples) {
+            if (current_ - start_ > max_speech_samples_) {
                 on_voice_end();
                 on_voice_start();
             }

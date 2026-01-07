@@ -38,16 +38,8 @@ void SileroVadModelV4::init_state() {
 }
 
 std::unique_ptr<VadModel> SileroVadModelV4::init(const VadConfig &config) {
-    auto instance = std::make_unique<SileroVadModelV4>(static_cast<const VadModel &>(*this));
-    instance->config_ = config;
-    instance->frame_shift_ = 512;
-    instance->frame_length_ = 512;
-
-    int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
-    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
-    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
-
+    // Silero V4 uses fixed 512 samples
+    auto instance = std::make_unique<SileroVadModelV4>(*this, config, 512, 512);
     instance->reset();
     return instance;
 }
@@ -83,17 +75,10 @@ void SileroVadModelV5::init_state() {
 }
 
 std::unique_ptr<VadModel> SileroVadModelV5::init(const VadConfig &config) {
-    auto instance = std::make_unique<SileroVadModelV5>(static_cast<const VadModel &>(*this));
-    instance->config_ = config;
-    instance->frame_shift_ = (config.sample_rate == 8000 ? 256 : 512);
-    int context_size = (config.sample_rate == 8000 ? 32 : 64);
-    instance->frame_length_ = instance->frame_shift_ + context_size;
-
-    int fs_ms = 1000 * instance->frame_shift_ / config.sample_rate;
-    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
-    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
-
+    // Silero V5: shift is 256/512, length adds context (32/64)
+    int shift = (config.sample_rate == 8000 ? 256 : 512);
+    int length = shift + (config.sample_rate == 8000 ? 32 : 64);
+    auto instance = std::make_unique<SileroVadModelV5>(*this, config, shift, length);
     instance->reset();
     return instance;
 }

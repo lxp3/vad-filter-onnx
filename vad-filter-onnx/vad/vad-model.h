@@ -26,8 +26,8 @@ class VadModel {
     void reset();
 
   protected:
-    // Protected constructor for sub-classes to share resources
-    VadModel(const VadModel &other);
+    // Protected constructor for sub-classes to share resources and pre-calculate parameters
+    VadModel(const VadModel &other, const VadConfig &config, int frame_shift, int frame_length);
 
     virtual float forward(float *data, int n) = 0;
     virtual void init_state() = 0;
@@ -43,9 +43,19 @@ class VadModel {
     Ort::AllocatorWithDefaultOptions allocator_;
     std::unique_ptr<SlidingWindowBit> window_detector_;
 
+    // Pre-calculated parameters (in samples or frames)
+    int samples_per_ms_;
+    int frame_length_;
+    int frame_shift_;
+    int speech_window_size_frames_;
+    int silence_window_size_frames_;
+    int speech_window_threshold_frames_;
+    int silence_window_threshold_frames_;
+    int left_padding_samples_;
+    int right_padding_samples_;
+    int max_speech_samples_;
+
     // vad status
-    int frame_length_ = 0;
-    int frame_shift_ = 0;
     int start_ = -1; // Speech start position, -1 means silence
     int end_ = -1;   // Speech end position, -1 means not ended
     int current_ = 0;

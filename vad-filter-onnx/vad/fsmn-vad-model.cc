@@ -22,21 +22,10 @@ bool is_fsmn_vad(const std::vector<const char *> &input_names,
 }
 
 std::unique_ptr<VadModel> FsmnVadModel::init(const VadConfig &config) {
-    auto instance = std::make_unique<FsmnVadModel>(static_cast<const VadModel &>(*this));
-    instance->config_ = config;
-    instance->type_ = VadType::FsmnVad;
-
-    // FSMN VAD underlying frame configuration: 25ms frame length, 10ms frame shift
-    instance->frame_shift_ = frame_shift_ms_ * (config.sample_rate / 1000);
-    instance->frame_length_ = frame_length_ms_ * (config.sample_rate / 1000);
-
-    // Window detector operates on the 10ms frame shift.
-    // The buffer size must be at least as large as the largest window.
-    int fs_ms = 10;
-    int max_win_ms = std::max(config.speech_window_size_ms, config.silence_window_size_ms);
-    int window_size = (max_win_ms + fs_ms - 1) / fs_ms;
-    instance->window_detector_ = std::make_unique<SlidingWindowBit>(window_size);
-
+    int samples_per_ms = config.sample_rate / 1000;
+    int frame_shift = 10 * samples_per_ms;
+    int frame_length = 25 * samples_per_ms;
+    auto instance = std::make_unique<FsmnVadModel>(*this, config, frame_shift, frame_length);
     instance->reset();
     return instance;
 }
@@ -106,8 +95,7 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits, int limit) {
         current_ += frame_shift_;
 
         if (start_ != -1) {
-            int max_samples = (config_.max_speech_ms * config_.sample_rate) / 1000;
-            if (current_ - start_ > max_samples) {
+            if (current_ - start_ > max_speech_samples_) {
                 on_voice_end();
                 on_voice_start();
             }
@@ -148,10 +136,10 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
      *    'current_' is advanced by logits.size() * 10ms.
      */
 
-    int fs = frame_shift_;                                      // 160 samples
-    int fl = frame_length_;                                     // 400 samples
-    int reminder_limit = 3 * fs + fl;                           // 55ms = 880 samples
-    int first_chunk_limit = 100 * (config_.sample_rate / 1000); // 100ms = 1600 samples
+    int fs = frame_shift_;                         // 160 samples
+    int fl = frame_length_;                        // 400 samples
+    int reminder_limit = 3 * fs + fl;              // 55ms = 880 samples
+    int first_chunk_limit = 100 * samples_per_ms_; // 100ms = 1600 samples
 
     // 2. Process First Chunk or Normal Steady State
     if (is_first_inference_) {
