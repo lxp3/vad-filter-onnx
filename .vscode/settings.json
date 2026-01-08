@@ -55,6 +55,10 @@
         "variant": "cpp",
         "hash_map": "cpp",
         "cstring": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "chrono": "cpp",
+        "codecvt": "cpp",
+        "ratio": "cpp",
+        "iomanip": "cpp"
     }
 }

@@ -87,9 +87,8 @@ std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t firs
     return speech_probs;
 }
 
-void FsmnVadModel::process_logits(const std::vector<float> &logits, int limit) {
-    int n = (limit == -1) ? static_cast<int>(logits.size()) : limit;
-    for (int i = 0; i < n; ++i) {
+void FsmnVadModel::process_logits(const std::vector<float> &logits) {
+    for (int i = 0; i < logits.size(); ++i) {
         float p = logits[i];
         update_frame_state(p);
         current_ += frame_shift_;
@@ -136,10 +135,8 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
      *    'current_' is advanced by logits.size() * 10ms.
      */
 
-    int fs = frame_shift_;                         // 160 samples
-    int fl = frame_length_;                        // 400 samples
-    int reminder_limit = 3 * fs + fl;              // 55ms = 880 samples
-    int first_chunk_limit = 100 * samples_per_ms_; // 100ms = 1600 samples
+    int reminder_limit = 3 * frame_shift_ + frame_length_; // 55ms = 880 samples
+    int first_chunk_limit = 100 * samples_per_ms_;         // 100ms = 1600 samples
 
     // 2. Process First Chunk or Normal Steady State
     if (is_first_inference_) {
@@ -164,9 +161,9 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
             // logits.size() = N_real + 2 - 4 = N_real - 2.
             // num_to_consume = logits.size() - 2.
             int num_to_consume = std::max(0, static_cast<int>(logits.size()) - 2);
-            process_logits(logits, num_to_consume);
+            process_logits(logits);
             // Erase only consumed samples; all others remain in reminder_
-            reminder_.erase(reminder_.begin(), reminder_.begin() + (num_to_consume * fs));
+            reminder_.erase(reminder_.begin(), reminder_.begin() + (num_to_consume * frame_shift_));
         }
     } else if (!input_finished) {
         // Normal state: process any new data beyond the 55ms reminder context
@@ -177,7 +174,7 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
             // Consume all produced scores (N_real - 4), leaving the required 55ms context
             process_logits(logits);
             // Precise erasure: keeps exactly the last 4 frames + any sub-frame remainder
-            reminder_.erase(reminder_.begin(), reminder_.begin() + (logits.size() * fs));
+            reminder_.erase(reminder_.begin(), reminder_.begin() + (logits.size() * frame_shift_));
         }
     } else {
         // Final flush when input_finished = true
