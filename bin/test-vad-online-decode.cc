@@ -9,9 +9,12 @@
 #include <cstdlib>
 #include <cstdio>
 #include <format>
+#include <filesystem>
 #include "vad-filter-onnx-cxx-api.h"
 #include "vad-config.h"
 
+
+constexpr std::size_t WAV_HEADER_SIZE = 44;
 using namespace VadFilterOnnx;
 
 static void print_usage(char **argv) {
@@ -83,26 +86,47 @@ static void parse_args(int argc, char **argv, std::string &model_path, std::stri
     }
 }
 
-std::vector<float> load_wav(const std::string &path) {
+std::vector<float> load_wav(const std::string& path)
+{
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        std::cerr << "Failed to open file: " << path << std::endl;
+        std::cerr << "Failed to open file: " << path << '\n';
         return {};
     }
 
-    // Skip standard 44-byte WAV header
-    file.seekg(44, std::ios::beg);
-
-    std::vector<float> data;
-    int16_t value;
-    while (file.read(reinterpret_cast<char *>(&value), sizeof(int16_t))) {
-        data.push_back(static_cast<float>(value) / 32768.0f);
+    const std::uintmax_t file_size = std::filesystem::file_size(path);
+    if (file_size <= WAV_HEADER_SIZE) {
+        std::cerr << "Invalid WAV file: " << path << '\n';
+        return {};
     }
 
-    std::cout << "Loaded " << path << " with " << data.size() << " samples" << std::endl;
+    file.seekg(WAV_HEADER_SIZE, std::ios::beg);  // 跳过 WAV header
+
+    const std::size_t sample_count =
+        (file_size - WAV_HEADER_SIZE) / sizeof(int16_t);
+
+    std::vector<int16_t> raw(sample_count);
+    file.read(reinterpret_cast<char*>(raw.data()),
+              sample_count * sizeof(int16_t));
+
+    if (!file) {
+        std::cerr << "Read error or truncated file: " << path << '\n';
+        return {};
+    }
+
+    constexpr float scale = 1.0f / 32768.0f;
+    std::vector<float> data(sample_count);
+
+    std::transform(raw.begin(), raw.end(), data.begin(),
+                   [](int16_t v) {
+                       return static_cast<float>(v) * scale;
+                   });
+
+    std::cout << "Loaded " << path
+              << ": " << data.size() << " samples\n";
+
     return data;
 }
-
 
 int main(int argc, char *argv[]) {
     std::string model_path;

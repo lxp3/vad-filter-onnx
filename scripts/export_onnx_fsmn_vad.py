@@ -36,7 +36,6 @@ class StreamingFbankLFR(nn.Module):
         self.cmvn = cmvn
         self.feat_dim = feat_dim
         self.lfr_m = lfr_m
-        self.left_ctx = lfr_m // 2  # 2
 
         self.fbank = Filterbank(
             sample_rate=sample_rate,
@@ -46,7 +45,6 @@ class StreamingFbankLFR(nn.Module):
             dither=0.0,
             window_fn=torch.hamming_window,
             snip_edges=True,
-            onnx_compatible=True,
         )
 
     def compute_feats(

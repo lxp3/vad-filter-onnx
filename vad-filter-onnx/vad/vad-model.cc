@@ -152,20 +152,17 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
         return {};
     }
 
-    int overlap_length = frame_length_ - frame_shift_;
-
-    // 1. Accumulate data if we have leftovers from previous call
+    float *ptr = data;
+    int len = n;
     if (!reminder_.empty()) {
         reminder_.insert(reminder_.end(), data, data + n);
+        ptr = reminder_.data();
+        len = static_cast<int>(reminder_.size());
     }
-
-    // Determine processing source: reminder buffer or direct input pointer
-    const float *ptr = reminder_.empty() ? data : reminder_.data();
-    int len = reminder_.empty() ? n : static_cast<int>(reminder_.size());
 
     // 2. Main inference loop: process frames by shifting window
     while (len >= frame_length_) {
-        float prob = forward(const_cast<float *>(ptr), frame_length_);
+        float prob = forward(ptr, frame_length_);
         update_frame_state(prob);
 
         // Check if current speech segment exceeds maximum allowed duration

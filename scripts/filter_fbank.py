@@ -53,7 +53,6 @@ class Filterbank(nn.Module):
         low_freq (float): Lower frequency boundary for Mel filters. Default: 20.0.
         high_freq (float): Upper frequency boundary for Mel filters. 0 or None for Nyquist. Default: 0.0.
         eps (float): Small value to prevent log(0). Default: 1e-10.
-        onnx_compatible (bool): If True, use ONNX-compatible operations (gather + DFT matrix). Default: False.
     """
 
     def __init__(
@@ -74,7 +73,6 @@ class Filterbank(nn.Module):
         low_freq: float = 20.0,
         high_freq: float = 0.0,
         eps: float = torch.finfo(torch.float32).eps,
-        onnx_compatible: bool = False,
     ):
         super().__init__()
 
@@ -93,7 +91,6 @@ class Filterbank(nn.Module):
         self.remove_dc_offset = remove_dc_offset
         self.round_to_power_of_two = round_to_power_of_two
         self.eps = eps
-        self.onnx_compatible = onnx_compatible
 
         # Convert time units from ms to samples
         self.win_length = int(round(frame_length * sample_rate / 1000))
@@ -359,24 +356,6 @@ class Filterbank(nn.Module):
 
         return power_spec
 
-    def compute_power_spectrum(
-        self, windowed: torch.Tensor, use_dft_matrix: bool = False
-    ) -> torch.Tensor:
-        """
-        Computes power spectrum.
-
-        Args:
-            windowed: [B, num_frames, win_length]
-            use_dft_matrix: If True, use DFT matrix multiplication; otherwise use rfft.
-
-        Returns:
-            power_spec: [B, num_frames, n_stft]
-        """
-        if use_dft_matrix:
-            return self.compute_power_spectrum_dft(windowed)
-        else:
-            return self.compute_power_spectrum_fft(windowed)
-
     def apply_mel_filterbank(self, power_spec: torch.Tensor) -> torch.Tensor:
         """
         Applies Mel filterbank and computes log.
@@ -390,10 +369,6 @@ class Filterbank(nn.Module):
         mel_spec = torch.matmul(power_spec, self.mel_filters.t())
         log_mel_spec = torch.log(torch.clamp(mel_spec, min=self.eps))
         return log_mel_spec
-
-    # ========================================
-    # Main processing function
-    # ========================================
 
     def forward(self, waveforms: torch.Tensor) -> torch.Tensor:
         """
@@ -409,8 +384,9 @@ class Filterbank(nn.Module):
                 - If use_energy=True: [batch_size, num_frames, num_mel_bins + 1]
 
         Note:
-            If self.onnx_compatible=True, uses DFT matrix and gather (fully ONNX compatible).
-            If self.onnx_compatible=False (default), uses torch.fft.rfft and unfold (efficient).
+            Automatically detects ONNX export environment:
+            - During ONNX export: uses DFT matrix and gather (fully compatible).
+            - During normal execution: uses torch.fft.rfft and unfold (efficient).
         """
         if waveforms.dim() != 2:
             raise ValueError(
@@ -427,7 +403,7 @@ class Filterbank(nn.Module):
             waveforms = F.pad(waveforms, (pad_amount, pad_amount), mode="reflect")
 
         # 3. Framing (gather for ONNX, unfold otherwise)
-        if self.onnx_compatible:
+        if torch.onnx.is_in_onnx_export():
             frames = self.extract_frames_as_strided(waveforms)
         else:
             frames = self.extract_frames_unfold(waveforms)
@@ -450,9 +426,10 @@ class Filterbank(nn.Module):
         windowed = frames * self.window
 
         # 8. Power Spectrum (DFT matrix for ONNX, FFT otherwise)
-        power_spec = self.compute_power_spectrum(
-            windowed, use_dft_matrix=self.onnx_compatible
-        )
+        if torch.onnx.is_in_onnx_export():
+            power_spec = self.compute_power_spectrum_dft(windowed)
+        else:
+            power_spec = self.compute_power_spectrum_fft(windowed)
 
         # 9. Compute windowed energy (if requested)
         if self.use_energy and not self.raw_energy:
