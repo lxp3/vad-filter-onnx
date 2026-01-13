@@ -13,3 +13,5 @@ log.txt
 *.log
 *.wav
 *.mp3
+.vscode/
+
