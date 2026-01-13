@@ -1,14 +1,9 @@
 # Configuration
-$VCVARS_PATH = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
+$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
-$ONNX_FILE = "./downloads/onnxruntime-win-x64-gpu-1.17.1.zip"
+$ONNX_FILE = "./public/onnxruntime-win-x64-gpu-1.17.1.zip"
 
 Write-Host "--- Configuring vad-filter-onnx (VS 2026 Ninja) ---" -ForegroundColor Cyan
-
-# if (Test-Path $BUILD_DIR) {
-#     Write-Host "Cleaning existing build directory..."
-#     Remove-Item -Path $BUILD_DIR -Recurse -Force
-# }
 
 # Run CMake Configuration inside a CMD environment with vcvarsall.bat
 # Using Ninja for faster builds and cleaner output

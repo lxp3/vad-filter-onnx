@@ -67,7 +67,7 @@ void GetInputOutputInfo(const std::shared_ptr<Ort::Session> &session,
     static Ort::AllocatorWithDefaultOptions allocator;
     static std::vector<Ort::AllocatedStringPtr> allocated_names{};
     // Input info
-    int num_nodes = session->GetInputCount();
+    int num_nodes = static_cast<int>(session->GetInputCount());
     in_names.resize(num_nodes);
     for (int i = 0; i < num_nodes; ++i) {
         Ort::AllocatedStringPtr name_shared_ptr = session->GetInputNameAllocated(i, allocator);
@@ -86,7 +86,7 @@ void GetInputOutputInfo(const std::shared_ptr<Ort::Session> &session,
         in_names[i] = name;
     }
     // Output info
-    num_nodes = session->GetOutputCount();
+    num_nodes = static_cast<int>(session->GetOutputCount());
     out_names.resize(num_nodes);
     for (int i = 0; i < num_nodes; ++i) {
         Ort::AllocatedStringPtr name_shared_ptr = session->GetOutputNameAllocated(i, allocator);

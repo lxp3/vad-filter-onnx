@@ -23,7 +23,7 @@ struct VadSegment {
 };
 
 struct VadConfig {
-    float threshold = 0.4;
+    float threshold = 0.4f;
     int sample_rate = 16000;
     int speech_window_size_ms = 300;      // window size for speech detection (silence -> speech)
     int speech_window_threshold_ms = 250; // speech duration threshold within speech window
