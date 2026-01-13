@@ -1,14 +1,16 @@
 # Configuration
 $VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
-$ONNX_FILE = "./public/onnxruntime-win-x64-gpu-1.17.1.zip"
+# $ONNX_SRC_DIR = "E:\Repos\demo-v1\sherpa-onnx-app\public\sherpa-onnx-v1.12.21-cuda-12.x-cudnn-9.x-win-x64-cuda"
+ONNXRUNTIME_FILE="public\onnxruntime-win-x64-gpu-1.23.2.zip"
 
 Write-Host "--- Configuring vad-filter-onnx (VS 2026 Ninja) ---" -ForegroundColor Cyan
 
 # Run CMake Configuration inside a CMD environment with vcvarsall.bat
 # Using Ninja for faster builds and cleaner output
 # CMAKE_EXPORT_COMPILE_COMMANDS generates compile_commands.json for IntelliSense
-$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"Ninja`" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DONNXRUNTIME_FILE=$ONNX_FILE"
+$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"Ninja`" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DONNXRUNTIME_FILE=$ONNXRUNTIME_FILE"
+
 
 Write-Host "Executing CMake configuration..."
 cmd.exe /c "`"$VCVARS_PATH`" x64 && $CmakeConfigCmd"
