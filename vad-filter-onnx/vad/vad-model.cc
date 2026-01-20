@@ -2,6 +2,7 @@
 #include "utils/onnx-common.h"
 #include "vad/fsmn-vad-model.h"
 #include "vad/silero-vad-model.h"
+#include "vad/ten-vad-model.h"
 // #include <format>
 // #include <iostream>
 
@@ -27,6 +28,10 @@ std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_thre
         model = std::make_unique<FsmnVadModel>();
         model->type_ = VadType::FsmnVad;
         printf("Success to create FsmnVad model from %s\n", path.c_str());
+    } else if (is_ten_vad(input_names, output_names)) {
+        model = std::make_unique<TenVadModel>();
+        model->type_ = VadType::TenVad;
+        printf("Success to create TenVad model from %s\n", path.c_str());
     } else {
         printf("ERROR: Unknown Vad model type in %s\n", path.c_str());
         return nullptr;
