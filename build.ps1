@@ -1,28 +1,19 @@
 # Configuration
-$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
-# $ONNX_SRC_DIR = "E:\Repos\demo-v1\sherpa-onnx-app\public\sherpa-onnx-v1.12.21-cuda-12.x-cudnn-9.x-win-x64-cuda"
-ONNXRUNTIME_FILE="public\onnxruntime-win-x64-gpu-1.23.2.zip"
 
-Write-Host "--- Configuring vad-filter-onnx (VS 2026 Ninja) ---" -ForegroundColor Cyan
-
-# Run CMake Configuration inside a CMD environment with vcvarsall.bat
-# Using Ninja for faster builds and cleaner output
-# CMAKE_EXPORT_COMPILE_COMMANDS generates compile_commands.json for IntelliSense
-$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"Ninja`" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DONNXRUNTIME_FILE=$ONNXRUNTIME_FILE"
-
-
-Write-Host "Executing CMake configuration..."
-cmd.exe /c "`"$VCVARS_PATH`" x64 && $CmakeConfigCmd"
+Write-Host "Configuring project..." -ForegroundColor Cyan
+# Using default generator (Visual Studio)
+# ENABLE_GPU=ON to use GPU version of ONNX Runtime as specified in onnxruntime.cmake
+cmake -B $BUILD_DIR -S . -DENABLE_GPU=OFF
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "CMake configuration failed!" -ForegroundColor Red
-    exit $LASTEXITCODE
+    Write-Error "CMake configuration failed!"
 }
 
-Write-Host "--- Building vad-filter-onnx ---" -ForegroundColor Cyan
-$CmakeBuildCmd = "cmake --build $BUILD_DIR -j 16"
-cmd.exe /c "`"$VCVARS_PATH`" x64 && $CmakeBuildCmd"
+Write-Host "`n--- Building vad-filter-onnx ---" -ForegroundColor Cyan
+
+# Build the project
+cmake --build $BUILD_DIR --config Release
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red

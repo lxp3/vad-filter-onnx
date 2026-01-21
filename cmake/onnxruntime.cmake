@@ -1,81 +1,105 @@
-# Copyright (c)  2022-2023  Xiaomi Corporation
-function(download_onnxruntime)
-  include(FetchContent)
+include(FetchContent)
 
-  message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
-  message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
-  
-  if(CMAKE_SYSTEM_NAME STREQUAL Linux AND CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64)
-    # Linux x86_64 GPU
-    include(onnxruntime-linux-x86_64-gpu)
-  elseif(WIN32)
-    # Windows x64 GPU
-    include(onnxruntime-win-x64-gpu)
-  else()
-    message(FATAL_ERROR "只支持 Linux x86_64 和 Windows x64 系统")
-  endif()
-  
-  message(STATUS "ONNXRUNTIME_SRC_DIR: ${ONNXRUNTIME_SRC_DIR}")
-
-  # 将onnxruntime的include路径添加到全局包含路径
-  if(ONNXRUNTIME_SRC_DIR)
-    message(STATUS "Adding onnxruntime include directory: ${ONNXRUNTIME_SRC_DIR}/include")
-    include_directories(${ONNXRUNTIME_SRC_DIR}/include)
-  endif()
-  
-  set(ONNXRUNTIME_SRC_DIR ${ONNXRUNTIME_SRC_DIR} PARENT_SCOPE)
-endfunction()
-
-# Check if onnxruntime is already configured by previous subprojects (like sherpa-onnx)
-if(onnxruntime_SOURCE_DIR)
-  set(ONNXRUNTIME_SRC_DIR "${onnxruntime_SOURCE_DIR}")
-  message(STATUS "Reusing existing onnxruntime from: ${ONNXRUNTIME_SRC_DIR}")
-elseif(ONNXRUNTIME_SRC_DIR AND EXISTS "${ONNXRUNTIME_SRC_DIR}")
-  message(STATUS "Using user specified ONNXRUNTIME_SRC_DIR: ${ONNXRUNTIME_SRC_DIR}")
-else()
-  # 如果没有指定或者目录不存在，则下载
-  message(STATUS "ONNXRUNTIME_SRC_DIR [${ONNXRUNTIME_SRC_DIR}] 不存在或未指定，下载预编译版本")
-  download_onnxruntime()
+# Avoid warnings about download timestamps
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
 endif()
 
-# 确保在函数外部也能访问onnxruntime的头文件和库
-if(ONNXRUNTIME_SRC_DIR)
-  # 设置全局包含路径
-  include_directories(${ONNXRUNTIME_SRC_DIR}/include)
-  
-  # 设置库文件路径变量，供CMakeLists.txt使用
-  if(WIN32)
-    # Windows系统
-    file(GLOB ONNXRUNTIME_LIBS "${ONNXRUNTIME_SRC_DIR}/lib/*.lib")
-    file(GLOB ONNXRUNTIME_DLLS "${ONNXRUNTIME_SRC_DIR}/lib/*.dll")
-    
-    # 将库添加到全局链接库列表
-    message(STATUS "Adding ONNX Runtime libraries to global link libraries")
-    link_libraries(${ONNXRUNTIME_LIBS})
-    
-    # 同时设置 ONNXRUNTIME_LIBRARIES 变量以保持兼容性
-    set(ONNXRUNTIME_LIBRARIES ${ONNXRUNTIME_LIBS})
-    
-    # 设置DLL路径供安装使用
-    set(ONNXRUNTIME_DLLS ${ONNXRUNTIME_DLLS} CACHE STRING "ONNX Runtime DLLs" FORCE)
-  else()
-    # Linux系统
-    file(GLOB ONNXRUNTIME_LIBS "${ONNXRUNTIME_SRC_DIR}/lib/*.so")
-    if(NOT ONNXRUNTIME_LIBS)
-      file(GLOB ONNXRUNTIME_LIBS "${ONNXRUNTIME_SRC_DIR}/lib/*.a")
+option(ENABLE_GPU "Enable GPU support for ONNX Runtime" OFF)
+
+set(ONNXRUNTIME_VERSION "1.23.2")
+
+if(WIN32)
+    if(ENABLE_GPU)
+        set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-1.23.2.zip")
+        set(ONNXRUNTIME_SHA256 "e77afdbbc2b8cb6da4e5a50d89841b48c44f3e47dce4fb87b15a2743786d0bb9")
+    else()
+        set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-1.23.2.zip")
+        set(ONNXRUNTIME_SHA256 "0b38df9af21834e41e73d602d90db5cb06dbd1ca618948b8f1d66d607ac9f3cd")
     endif()
-    
-    # 将库添加到全局链接库列表
-    message(STATUS "Adding ONNX Runtime libraries to global link libraries")
-    link_libraries(${ONNXRUNTIME_LIBS})
-
-    # 同时设置 ONNXRUNTIME_LIBRARIES 变量以保持兼容性
-    set(ONNXRUNTIME_LIBRARIES ${ONNXRUNTIME_LIBS})
-  endif()
-  
-  message(STATUS "ONNXRUNTIME include: ${ONNXRUNTIME_SRC_DIR}/include")
-  message(STATUS "ONNXRUNTIME libs: ${ONNXRUNTIME_LIBS}")
-  if(WIN32)
-    message(STATUS "ONNXRUNTIME DLLs: ${ONNXRUNTIME_DLLS}")
-  endif()
+elseif(APPLE)
+    # macOS provided is only for CPU
+    set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x86_64-1.23.2.tgz")
+    set(ONNXRUNTIME_SHA256 "d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6")
+elseif(UNIX)
+    if(ENABLE_GPU)
+        set(ONNXRUNTIME_URL "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-1.23.2-patched.zip")
+        set(ONNXRUNTIME_SHA256 "e2f622513212304447e34512b99ae4eabb4fd8870dd1baac895f222179dede19")
+    else()
+        set(ONNXRUNTIME_URL "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.23.2/onnxruntime-linux-x64-glibc2_17-Release-1.23.2.zip")
+        set(ONNXRUNTIME_SHA256 "77ea3532dfdd8d5c66918429f7eacd80c1fea834941a14746adf3109f8e7b830")
+    endif()
 endif()
+
+# Get filename from URL
+get_filename_component(ONNXRUNTIME_FILENAME ${ONNXRUNTIME_URL} NAME)
+set(DOWNLOAD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public/downloads")
+set(LOCAL_ZIP_PATH "${DOWNLOAD_DIR}/${ONNXRUNTIME_FILENAME}")
+
+# Create download directory if not exists
+if(NOT EXISTS "${DOWNLOAD_DIR}")
+    file(MAKE_DIRECTORY "${DOWNLOAD_DIR}")
+endif()
+
+# Download if not exists or hash mismatch
+if(NOT EXISTS "${LOCAL_ZIP_PATH}")
+    message(STATUS "Downloading ONNX Runtime from ${ONNXRUNTIME_URL} to ${LOCAL_ZIP_PATH}...")
+    file(DOWNLOAD ${ONNXRUNTIME_URL} "${LOCAL_ZIP_PATH}"
+        EXPECTED_HASH SHA256=${ONNXRUNTIME_SHA256}
+        SHOW_PROGRESS
+    )
+else()
+    # Verify hash if file exists to ensure integrity
+    file(SHA256 "${LOCAL_ZIP_PATH}" ACTUAL_HASH)
+    if(NOT ACTUAL_HASH STREQUAL ONNXRUNTIME_SHA256)
+        message(WARNING "Hash mismatch for ${LOCAL_ZIP_PATH}. Redownloading...")
+        file(DOWNLOAD ${ONNXRUNTIME_URL} "${LOCAL_ZIP_PATH}"
+            EXPECTED_HASH SHA256=${ONNXRUNTIME_SHA256}
+            SHOW_PROGRESS
+        )
+    endif()
+endif()
+
+# Use FetchContent to extract
+FetchContent_Declare(
+    onnxruntime
+    URL "${LOCAL_ZIP_PATH}"
+)
+
+FetchContent_MakeAvailable(onnxruntime)
+
+# Define variables for ease of use
+set(ONNXRUNTIME_ROOT_DIR ${onnxruntime_SOURCE_DIR})
+set(ONNXRUNTIME_INCLUDE_DIRS ${ONNXRUNTIME_ROOT_DIR}/include)
+
+if(WIN32)
+    set(ONNXRUNTIME_LIB ${ONNXRUNTIME_ROOT_DIR}/lib/onnxruntime.lib)
+    set(ONNXRUNTIME_DLL ${ONNXRUNTIME_ROOT_DIR}/lib/onnxruntime.dll)
+elseif(APPLE)
+    set(ONNXRUNTIME_LIB ${ONNXRUNTIME_ROOT_DIR}/lib/libonnxruntime.dylib)
+else()
+    set(ONNXRUNTIME_LIB ${ONNXRUNTIME_ROOT_DIR}/lib/libonnxruntime.so)
+endif()
+
+# Create imported target
+if(NOT TARGET onnxruntime)
+    add_library(onnxruntime SHARED IMPORTED)
+    set_target_properties(onnxruntime PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${ONNXRUNTIME_INCLUDE_DIRS}"
+    )
+    if(WIN32)
+        set_target_properties(onnxruntime PROPERTIES
+            IMPORTED_IMPLIB "${ONNXRUNTIME_LIB}"
+            IMPORTED_LOCATION "${ONNXRUNTIME_DLL}"
+        )
+    else()
+        set_target_properties(onnxruntime PROPERTIES
+            IMPORTED_LOCATION "${ONNXRUNTIME_LIB}"
+        )
+    endif()
+endif()
+
+message(STATUS "ONNX Runtime version: ${ONNXRUNTIME_VERSION}")
+message(STATUS "ONNX Runtime root: ${ONNXRUNTIME_ROOT_DIR}")
+message(STATUS "ONNX Runtime include: ${ONNXRUNTIME_INCLUDE_DIRS}")
+message(STATUS "ONNX Runtime libraries: ${ONNXRUNTIME_LIB}")
