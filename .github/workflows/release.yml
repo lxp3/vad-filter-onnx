@@ -22,10 +22,10 @@ jobs:
             gpu: ON
             container: quay.io/pypa/manylinux_2_28_x86_64
           - os: windows-2019
-            platform: windows
+            platform: win
             gpu: OFF
           - os: windows-2019
-            platform: windows
+            platform: win
             gpu: ON
           - os: macos-12
             platform: macos
@@ -40,7 +40,6 @@ jobs:
       - name: Install Dependencies (Linux)
         if: matrix.platform == 'linux'
         run: |
-          # manylinux usually has what we need
           echo "Building for Linux with GPU=${{ matrix.gpu }}"
 
       - name: Configure CMake (Linux)
@@ -51,7 +50,7 @@ jobs:
             -DENABLE_GPU=${{ matrix.gpu }}
             
       - name: Configure CMake (Windows)
-        if: matrix.platform == 'windows'
+        if: matrix.platform == 'win'
         run: |
           cmake -B build -S . `
             -DCMAKE_BUILD_TYPE=Release `
@@ -72,18 +71,23 @@ jobs:
         run: cmake --install build --prefix install/vad-filter-onnx
 
       - name: Package (Zip)
-        if: matrix.platform == 'windows'
+        if: matrix.platform == 'win'
         run: |
           $gpu_tag = if ("${{ matrix.gpu }}" -eq "ON") { "gpu" } else { "cpu" }
+          $pkg_name = "vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64"
+          mv install/vad-filter-onnx install/$pkg_name
           cd install
-          7z a ../vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64.zip vad-filter-onnx/
+          7z a ../$pkg_name.zip $pkg_name/
         shell: pwsh
 
       - name: Package (Tar)
-        if: matrix.platform != 'windows'
+        if: matrix.platform != 'win'
         run: |
           gpu_tag=${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
-          tar -czvf vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64.tar.gz -C install vad-filter-onnx
+          pkg_name="vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64"
+          mv install/vad-filter-onnx install/$pkg_name
+          tar -czvf $pkg_name.tar.gz -C install $pkg_name
+          mv $pkg_name.tar.gz .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

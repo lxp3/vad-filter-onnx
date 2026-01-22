@@ -34,10 +34,13 @@ install(TARGETS test-vad-online-decode RUNTIME DESTINATION bin)
 
 # Install ONNX Runtime shared library
 if(WIN32)
-    install(FILES ${ONNXRUNTIME_DLL} DESTINATION bin)
+    file(GLOB ORT_DLLS "${ONNXRUNTIME_ROOT}/lib/*.dll")
+    install(FILES ${ORT_DLLS} DESTINATION bin)
 elseif(APPLE)
-    install(FILES ${ONNXRUNTIME_LIB} DESTINATION lib)
+    file(GLOB ORT_DLLS "${ONNXRUNTIME_ROOT}/lib/*.dylib")
+    install(FILES ${ORT_DLLS} DESTINATION lib)
 else()
-    install(FILES ${ONNXRUNTIME_LIB} DESTINATION lib)
+    file(GLOB ORT_DLLS "${ONNXRUNTIME_ROOT}/lib/*.so*")
+    install(FILES ${ORT_DLLS} DESTINATION lib)
 endif()
 
