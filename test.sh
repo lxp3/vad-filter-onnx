@@ -15,9 +15,9 @@ if [ ${stage} -eq -1 ]; then
     ${wav_path}
 fi
 
-silero_vad_v4_onnx_path="public/silero_vad.v4.onnx"
-silero_vad_v6_onnx_path="public/silero_vad_16k_op15.v6.onnx"
-fsmn_vad_onnx_path="public/fsmn_vad.16k.onnx"
+silero_vad_v4_onnx_path="public/models/silero_vad.v4.onnx"
+silero_vad_v6_onnx_path="public/models/silero_vad_16k_op15.v6.onnx"
+fsmn_vad_onnx_path="public/models/fsmn_vad.16k.onnx"
 if [ ${stage} -eq 0 ]; then
     echo "Testing FSMN VAD model..."
     ./build/test-vad-online-decode \
