@@ -32,4 +32,17 @@ target_link_libraries(${PROJECT_NAME}
 add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
 target_link_libraries(test-sliding-window-bit PRIVATE ${PROJECT_NAME})
 
+# Installation
+install(TARGETS ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}Targets
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+install(DIRECTORY include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h"
+)
+
 

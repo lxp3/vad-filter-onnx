@@ -1,0 +1,111 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }} (${{ matrix.gpu == 'ON' && 'GPU' || 'CPU' }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            platform: linux
+            gpu: OFF
+            container: quay.io/pypa/manylinux_2_28_x86_64
+          - os: ubuntu-20.04
+            platform: linux
+            gpu: ON
+            container: quay.io/pypa/manylinux_2_28_x86_64
+          - os: windows-2019
+            platform: windows
+            gpu: OFF
+          - os: windows-2019
+            platform: windows
+            gpu: ON
+          - os: macos-12
+            platform: macos
+            gpu: OFF
+
+    container: ${{ matrix.container }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          # manylinux usually has what we need
+          echo "Building for Linux with GPU=${{ matrix.gpu }}"
+
+      - name: Configure CMake (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_GPU=${{ matrix.gpu }}
+            
+      - name: Configure CMake (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_GPU=${{ matrix.gpu }}
+
+      - name: Configure CMake (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_GPU=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Install
+        run: cmake --install build --prefix install/vad-filter-onnx
+
+      - name: Package (Zip)
+        if: matrix.platform == 'windows'
+        run: |
+          $gpu_tag = if ("${{ matrix.gpu }}" -eq "ON") { "gpu" } else { "cpu" }
+          cd install
+          7z a ../vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64.zip vad-filter-onnx/
+        shell: pwsh
+
+      - name: Package (Tar)
+        if: matrix.platform != 'windows'
+        run: |
+          gpu_tag=${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
+          tar -czvf vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-$gpu_tag-x64.tar.gz -C install vad-filter-onnx
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vad-filter-onnx-${{ matrix.platform }}-${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
+          path: vad-filter-onnx-${{ github.ref_name }}-${{ matrix.platform }}-*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

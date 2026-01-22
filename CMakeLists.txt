@@ -29,3 +29,15 @@ add_executable(test-vad-online-decode vad-filter-onnx/bin/test-vad-online-decode
 target_link_libraries(test-vad-online-decode PRIVATE vad_filter_onnx)
 target_include_directories(test-vad-online-decode PRIVATE vad-filter-onnx/include)
 
+# Installation
+install(TARGETS test-vad-online-decode RUNTIME DESTINATION bin)
+
+# Install ONNX Runtime shared library
+if(WIN32)
+    install(FILES ${ONNXRUNTIME_DLL} DESTINATION bin)
+elseif(APPLE)
+    install(FILES ${ONNXRUNTIME_LIB} DESTINATION lib)
+else()
+    install(FILES ${ONNXRUNTIME_LIB} DESTINATION lib)
+endif()
+
