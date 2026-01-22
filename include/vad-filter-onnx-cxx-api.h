@@ -49,4 +49,10 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+/**
+ * @brief Get available ONNX Runtime execution providers.
+ * @return A vector of strings representing the available providers.
+ */
+std::vector<std::string> get_ort_available_providers();
+
 } // namespace VadFilterOnnx

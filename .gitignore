@@ -9,7 +9,8 @@ deprecated/
 *.swp
 *.zip
 *.bak
-log.txt
+*.txt
+!CMakeLists.txt
 *.log
 *.wav
 *.mp3

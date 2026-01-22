@@ -1,5 +1,6 @@
 #include "vad-filter-onnx-cxx-api.h"
 #include "vad/vad-model.h"
+#include <onnxruntime_cxx_api.h>
 
 namespace VadFilterOnnx {
 
@@ -65,6 +66,10 @@ VadSegment AutoVadModel::flush() {
         return impl_->internal_model_->flush();
     }
     return VadSegment();
+}
+
+std::vector<std::string> get_ort_available_providers() {
+    return Ort::GetAvailableProviders();
 }
 
 } // namespace VadFilterOnnx

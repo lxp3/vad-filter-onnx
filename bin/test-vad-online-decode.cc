@@ -136,6 +136,13 @@ int main(int argc, char *argv[]) {
 
     parse_args(argc, argv, model_path, wav_path, config, chunk_size_ms);
 
+    // Print available ONNX Runtime providers
+    std::cout << "Available ONNX Runtime Providers:" << std::endl;
+    auto providers = get_ort_available_providers();
+    for (const auto &p : providers) {
+        std::cout << "  - " << p << std::endl;
+    }
+
     std::vector<float> samples = load_wav(wav_path);
     if (samples.empty())
         return 1;
