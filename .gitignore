@@ -12,6 +12,3 @@ deprecated/
 *.txt
 !CMakeLists.txt
 *.log
-*.wav
-*.mp3
-.vscode/
