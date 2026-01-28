@@ -4,7 +4,7 @@ $BUILD_DIR = "build"
 Write-Host "Configuring project..." -ForegroundColor Cyan
 # Using default generator (Visual Studio)
 # ENABLE_GPU=ON to use GPU version of ONNX Runtime as specified in onnxruntime.cmake
-cmake -B $BUILD_DIR -S . -DENABLE_GPU=ON
+cmake -B $BUILD_DIR -S . -DENABLE_GPU=OFF -DENABLE_PYTHON=ON
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "CMake configuration failed!"

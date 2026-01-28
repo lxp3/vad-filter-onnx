@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(vad_project LANGUAGES CXX)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
+option(ENABLE_PYTHON "Enable Python bindings" OFF)
 
 # 修复 RuntimeLibrary 不匹配问题 (MT vs MD)
 if(MSVC)
@@ -27,7 +29,10 @@ add_subdirectory(vad-filter-onnx)
 # Binaries
 add_executable(test-vad-online-decode vad-filter-onnx/bin/test-vad-online-decode.cc)
 target_link_libraries(test-vad-online-decode PRIVATE vad_filter_onnx)
-target_include_directories(test-vad-online-decode PRIVATE vad-filter-onnx/include)
+target_include_directories(test-vad-online-decode PRIVATE 
+    vad-filter-onnx/include
+    vad-filter-onnx/vad
+)
 
 # Installation
 install(TARGETS test-vad-online-decode RUNTIME DESTINATION bin)
