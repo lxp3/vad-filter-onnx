@@ -14,24 +14,29 @@ list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-sliding-window-bi
 
 
 # Library
-add_library(vad_filter_onnx STATIC ${SOURCES})
+if(BUILD_SHARED_LIBS STREQUAL "ON")
+    add_library(vad_filter_onnx_lib SHARED ${SOURCES})
+else()
+    add_library(vad_filter_onnx_lib STATIC ${SOURCES})
+endif()
 
-target_include_directories(vad_filter_onnx PUBLIC 
+target_include_directories(vad_filter_onnx_lib PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(vad_filter_onnx 
-    PRIVATE 
-    onnxruntime
-)
+if(BUILD_SHARED_LIBS STREQUAL "ON")
+    target_link_libraries(vad_filter_onnx_lib PRIVATE onnxruntime)
+else()
+    target_link_libraries(vad_filter_onnx_lib PUBLIC onnxruntime)
+endif()
 
 # Test
 add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
-target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx)
+target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx_lib)
 
 # Installation
-install(TARGETS vad_filter_onnx
+install(TARGETS vad_filter_onnx_lib
     EXPORT ${PROJECT_NAME}Targets
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib

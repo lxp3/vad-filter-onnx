@@ -1,5 +1,4 @@
 #include "utils/onnx-common.h"
-#include <format>
 #include <sstream>
 
 namespace VadFilterOnnx {
@@ -30,19 +29,19 @@ Ort::SessionOptions GetSessionOptions(int num_threads, int device_id) {
         config.device_id = device_id;
         config.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
         sess_opts.AppendExecutionProvider_CUDA(config);
-        printf("INFO: Initialize session in cuda:%d\n", device_id);
+        printf("[onnx] Initialize session in cuda:%d\n", device_id);
     } else {
         sess_opts.SetIntraOpNumThreads(num_threads); // 同一算子内部平行
         sess_opts.SetInterOpNumThreads(num_threads); // 不同操作之间并行
         sess_opts.DisableCpuMemArena();              //
-        printf("INFO: Initialize session in cpu\n");
+        printf("[onnx] Initialize session in cpu\n");
     }
 
     return std::move(sess_opts);
 }
 
 std::shared_ptr<Ort::Session> ReadOnnx(const std::string &path, int num_threads, int device_id) {
-    printf("INFO: Reading onnx model: %s\n", path.c_str());
+    printf("[onnx] Reading onnx model: %s\n", path.c_str());
     auto &env = GetOrtEnv();
     auto sess_opts = GetSessionOptions(num_threads, device_id);
     std::shared_ptr<Ort::Session> session{ nullptr };
@@ -54,70 +53,85 @@ std::shared_ptr<Ort::Session> ReadOnnx(const std::string &path, int num_threads,
 #else
         session = std::make_shared<Ort::Session>(env, path.c_str(), sess_opts);
 #endif
-        printf("INFO: Success to load onnx model: %s\n", path.c_str());
+        printf("[onnx] Success to load onnx model: %s\n", path.c_str());
     } catch (std::exception const &e) {
-        printf("ERROR: Error when load onnx model: %s\n", e.what());
+        printf("[onnx] Error when load onnx model: %s\n", e.what());
         exit(0);
     }
     return std::move(session);
+}
+
+const char *DataTypeToString(ONNXTensorElementDataType type) {
+    switch (type) {
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT: return "Float";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8: return "Uint8";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8: return "Int8";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16: return "Uint16";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16: return "Int16";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32: return "Int32";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64: return "Int64";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING: return "String";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL: return "Bool";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16: return "Float16";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE: return "Double";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32: return "Uint32";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64: return "Uint64";
+        case ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16: return "BFloat16";
+        default: return "Unknown";
+    }
 }
 
 void GetInputOutputInfo(const std::shared_ptr<Ort::Session> &session,
                         std::vector<const char *> &in_names, std::vector<const char *> &out_names) {
     static Ort::AllocatorWithDefaultOptions allocator;
     static std::vector<Ort::AllocatedStringPtr> allocated_names{};
+
+    auto print_info = [&](const char *label, int i, bool is_input) {
+        Ort::AllocatedStringPtr name_shared_ptr =
+            is_input ? session->GetInputNameAllocated(i, allocator)
+                     : session->GetOutputNameAllocated(i, allocator);
+        allocated_names.push_back(std::move(name_shared_ptr));
+        char *name = allocated_names.back().get();
+
+        Ort::TypeInfo type_info =
+            is_input ? session->GetInputTypeInfo(i) : session->GetOutputTypeInfo(i);
+        auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
+        ONNXTensorElementDataType type = tensor_info.GetElementType();
+        std::vector<int64_t> node_dims = tensor_info.GetShape();
+
+        std::stringstream shape;
+        shape << "[";
+        for (size_t j = 0; j < node_dims.size(); ++j) {
+            shape << node_dims[j];
+            if (j < node_dims.size() - 1) {
+                shape << ", ";
+            }
+        }
+        shape << "]";
+
+        printf("[onnx] %s %d: name=%s, %s, dims=%s\n", label, i, name, DataTypeToString(type),
+               shape.str().c_str());
+        return name;
+    };
+
     // Input info
-    int num_nodes = static_cast<int>(session->GetInputCount());
-    in_names.resize(num_nodes);
-    for (int i = 0; i < num_nodes; ++i) {
-        Ort::AllocatedStringPtr name_shared_ptr = session->GetInputNameAllocated(i, allocator);
-        allocated_names.push_back(std::move(name_shared_ptr));
-        char *name = allocated_names.back().get();
-        Ort::TypeInfo type_info = session->GetInputTypeInfo(i);
-        auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
-        ONNXTensorElementDataType type = tensor_info.GetElementType();
-        std::vector<int64_t> node_dims = tensor_info.GetShape();
-        std::stringstream shape;
-        for (auto j : node_dims) {
-            shape << j;
-            shape << " ";
-        }
-        printf("INFO: \tInput %d : name=%s type=%d dims=%s\n", i, name, type, shape.str().c_str());
-        in_names[i] = name;
+    int num_inputs = static_cast<int>(session->GetInputCount());
+    in_names.resize(num_inputs);
+    for (int i = 0; i < num_inputs; ++i) {
+        in_names[i] = print_info("Input", i, true);
     }
+
     // Output info
-    num_nodes = static_cast<int>(session->GetOutputCount());
-    out_names.resize(num_nodes);
-    for (int i = 0; i < num_nodes; ++i) {
-        Ort::AllocatedStringPtr name_shared_ptr = session->GetOutputNameAllocated(i, allocator);
-        allocated_names.push_back(std::move(name_shared_ptr));
-        char *name = allocated_names.back().get();
-        Ort::TypeInfo type_info = session->GetOutputTypeInfo(i);
-        auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
-        ONNXTensorElementDataType type = tensor_info.GetElementType();
-        std::vector<int64_t> node_dims = tensor_info.GetShape();
-        std::stringstream shape;
-        for (auto j : node_dims) {
-            shape << j;
-            shape << " ";
-        }
-        printf("INFO: \tOutput %d : name=%s type=%d dims=%s\n", i, name, type, shape.str().c_str());
-        out_names[i] = name;
+    int num_outputs = static_cast<int>(session->GetOutputCount());
+    out_names.resize(num_outputs);
+    for (int i = 0; i < num_outputs; ++i) {
+        out_names[i] = print_info("Output", i, false);
     }
 }
 
 std::string LookupCustomModelMetaData(const Ort::ModelMetadata &meta_data, const char *key,
                                       OrtAllocator *allocator) {
-// Note(fangjun): We only tested 1.17.1 and 1.11.0
-// For other versions, we may need to change it
-#if ORT_API_VERSION >= 12
     auto v = meta_data.LookupCustomMetadataMapAllocated(key, allocator);
     return v ? v.get() : "";
-#else
-    auto v = meta_data.LookupCustomMetadataMap(key, allocator);
-    std::string ans = v ? v : "";
-    allocator->Free(allocator, v);
-    return ans;
-#endif
 }
 } // namespace VadFilterOnnx

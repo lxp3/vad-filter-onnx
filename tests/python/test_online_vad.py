@@ -1,14 +1,26 @@
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../build/vad-filter-onnx/python/Release"))
+
+# Update sys.path to support both build and build_static
+possible_paths = [
+    "../../build/vad-filter-onnx/python/Release",
+    "../../build_static/vad-filter-onnx/python/Release",
+    "../../build_shared/vad-filter-onnx/python/Release"
+]
+for p in possible_paths:
+    full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), p))
+    if os.path.exists(full_path):
+        sys.path.append(full_path)
+        break
+
 from avioflow import AudioDecoder, AudioStreamOptions
-import vad_filter_onnx as vad
+from vad_filter_onnx import get_ort_available_providers, AutoVadModel, VadConfig
 
 def test_online_vad():
-    print("Available providers:", vad.get_ort_available_providers())
+    print("Available providers:", get_ort_available_providers())
 
     # Create config
-    config = vad.VadConfig()
+    config = VadConfig()
     config.sample_rate = 16000
     config.threshold = 0.5
     print(f"Config initialized: sample_rate={config.sample_rate}, threshold={config.threshold}")
@@ -39,26 +51,37 @@ def test_online_vad():
     # Assume mono or take first channel
     mono_data = samples.data[0]
     
-    # Create model
-    model_handle = vad.AutoVadModel.create(model_path, num_threads=1, device_id=-1)
+    # Create model (using new constructor API)
+    model_handle = AutoVadModel(model_path, num_threads=1, device_id=-1)
     print("Model handle created successfully")
 
     # Initialize instance
     instance = model_handle.init(config)
     print("Model instance initialized successfully")
 
-    # Decode in chunks to simulate online behavior if desired, or all at once
-    # For simplicity, decode all at once
-    segments = instance.decode(mono_data, True)
-    print(f"Decoded segments: {segments}")
-
-    for segment in segments:
-        print(f"Segment: {segment}")
+    # Decode in 100ms chunks to simulate online behavior
+    sample_rate = config.sample_rate
+    chunk_size = int(sample_rate * 0.1) # 100ms
+    
+    print(f"Decoding in chunks of {chunk_size} samples (100ms)...")
+    
+    all_segments = []
+    for i in range(0, len(mono_data), chunk_size):
+        chunk = mono_data[i:i + chunk_size]
+        segments = instance.decode(chunk)
+        if segments:
+            all_segments.extend(segments)
+            for s in segments:
+                print(f"Chunk Segments: {s}")
 
     # Finalize
+    print("\nFlushing...")
     last_segment = instance.flush()
     if last_segment.idx != -1:
         print(f"Final segment: {last_segment}")
+        all_segments.append(last_segment)
+
+    print(f"\nAll Decoded segments: {all_segments}")
 
 if __name__ == "__main__":
     test_online_vad()

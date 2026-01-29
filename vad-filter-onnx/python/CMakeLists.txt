@@ -4,7 +4,7 @@ include(pybind11)
 pybind11_add_module(vad_filter_onnx_python binding.cc)
 
 # Link to the main library
-target_link_libraries(vad_filter_onnx_python PRIVATE vad_filter_onnx)
+target_link_libraries(vad_filter_onnx_python PRIVATE vad_filter_onnx_lib)
 
 # Include directories
 target_include_directories(vad_filter_onnx_python PRIVATE 
@@ -21,7 +21,7 @@ set_target_properties(vad_filter_onnx_python PROPERTIES
 )
 
 # Copy onnxruntime.dll to the same directory as the pyd file
-if(WIN32)
+if(WIN32 AND BUILD_SHARED_LIBS STREQUAL "ON")
     add_custom_command(TARGET vad_filter_onnx_python POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${ONNXRUNTIME_DLL}"

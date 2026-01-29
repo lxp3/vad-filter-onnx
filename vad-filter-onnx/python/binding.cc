@@ -57,9 +57,14 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
                        "Padding added to end of speech in ms (default: 100)");
 
     py::class_<AutoVadModel>(m, "AutoVadModel", "High-level VAD model API")
+        .def(py::init([](const std::string &path, int num_threads, int device_id) {
+                 return AutoVadModel::create(path, num_threads, device_id);
+             }),
+             py::arg("path"), py::arg("num_threads") = 1, py::arg("device_id") = -1,
+             "Create a model handle by loading an ONNX model from the given path.")
         .def_static("create", &AutoVadModel::create, py::arg("path"), py::arg("num_threads") = 1,
                     py::arg("device_id") = -1,
-                    "Create a model handle by loading an ONNX model from the given path.")
+                    "Create a model handle by loading an ONNX model from the given path (Legacy static method).")
         .def("init", &AutoVadModel::init, py::arg("config"),
              "Initialize a model instance for inference with the given configuration.")
         .def(
@@ -72,7 +77,7 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
                 return self.decode(static_cast<float *>(buf.ptr), static_cast<int>(buf.size),
                                    input_finished);
             },
-            py::arg("data"), py::arg("input_finished"),
+            py::arg("data"), py::arg("input_finished") = false,
             "Process audio data and return detected segments.")
         .def("reset", &AutoVadModel::reset, "Reset the model internal state.")
         .def("flush", &AutoVadModel::flush,

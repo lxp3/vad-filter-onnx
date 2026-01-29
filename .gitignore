@@ -1,4 +1,6 @@
 build/
+build_*/
+downloads/
 __pycache__
 debug/
 deprecated/
