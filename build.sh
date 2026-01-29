@@ -2,18 +2,30 @@
 
 set -e
 
+# Configuration
+BUILD_SHARED_LIBS="ON"
 
-# 格式化 CMakeLists.txt
-# find . -name "CMakeLists.txt" -exec cmake-format -i {} +
+if [ "$BUILD_SHARED_LIBS" = "ON" ]; then
+    BUILD_DIR="build_shared"
+else
+    BUILD_DIR="build_static"
+fi
 
-# 格式化 C++ 代码
-find vad-filter-onnx -type f \( -name "*.cc" -o -name "*.h" \) -exec ./clang-format -style=file -i {} +
-# exit 0
+# Print configuration info
+echo -e "\033[0;36mConfiguring project ($BUILD_DIR)...\033[0m"
 
+# Build options
+# -DCMAKE_BUILD_TYPE=Release is required for single-config generators (like Unix Makefiles)
+# ENABLE_GPU=ON to use GPU version of ONNX Runtime as specified in onnxruntime.cmake
+cmake -B "$BUILD_DIR" -S . \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS="$BUILD_SHARED_LIBS" \
+    -DENABLE_GPU=OFF \
+    -DENABLE_PYTHON=ON
 
-build_dir=build
-cmake -S . -B ${build_dir} \
-    -DCMAKE_BUILD_TYPE=release \
-    -DONNXRUNTIME_FILE=./public/onnxruntime-linux-x64-gpu-1.17.1-patched.zip
-cmake --build ${build_dir} -j16 
-# cd build && make  -j16 # VERBOSE=1
+echo -e "\n\033[0;36m--- Building vad-filter-onnx ---\033[0m"
+
+# Build the project using all available cores
+cmake --build "$BUILD_DIR" --config Release -j$(nproc)
+
+echo -e "\033[0;32mBuild completed successfully!\033[0m"
