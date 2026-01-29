@@ -9,6 +9,10 @@ if(NOT BUILD_SHARED_LIBS STREQUAL "ON" AND ENABLE_GPU STREQUAL "ON")
     message(FATAL_ERROR "ENABLE_GPU=ON is not supported when BUILD_SHARED_LIBS is not ON. Please set ENABLE_GPU=OFF or build with BUILD_SHARED_LIBS=ON.")
 endif()
 
+# Enable Position Independent Code (PIC) for static libraries
+# This is required on Linux when linking static libs into shared objects (like Python modules)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # 修复 RuntimeLibrary 不匹配问题 (MT vs MD)
 if(MSVC)
     if(BUILD_SHARED_LIBS STREQUAL "ON")
