@@ -1,20 +1,36 @@
 import os
 import sys
 
-# Update sys.path to support both build and build_static
+# Update sys.path to support both build and build_static (Windows and Linux)
 possible_paths = [
     "../../build/vad-filter-onnx/python/Release",
     "../../build_static/vad-filter-onnx/python/Release",
-    "../../build_shared/vad-filter-onnx/python/Release"
+    "../../build_shared/vad-filter-onnx/python/Release",
+    "../../build/vad-filter-onnx/python",
+    "../../build_static/vad-filter-onnx/python",
+    "../../build_shared/vad-filter-onnx/python",
 ]
+
+found_path = False
 for p in possible_paths:
     full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), p))
     if os.path.exists(full_path):
+        print(f"Adding library path: {full_path}")
         sys.path.append(full_path)
+        found_path = True
         break
 
-from avioflow import AudioDecoder, AudioStreamOptions
-from vad_filter_onnx import get_ort_available_providers, AutoVadModel, VadConfig
+if not found_path:
+    print("Warning: Could not find any compiled library paths. Checked:")
+    for p in possible_paths:
+        print(f"  - {os.path.abspath(os.path.join(os.path.dirname(__file__), p))}")
+
+try:
+    from avioflow import AudioDecoder, AudioStreamOptions
+    from vad_filter_onnx import get_ort_available_providers, AutoVadModel, VadConfig
+except ImportError as e:
+    print(f"Error: {e}")
+    sys.exit(1)
 
 def test_online_vad():
     print("Available providers:", get_ort_available_providers())
