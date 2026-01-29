@@ -2,13 +2,13 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <sstream>
 #include <cstdint>
 #include <algorithm>
 #include <memory>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
-#include <format>
 #include <filesystem>
 #include "vad-filter-onnx-cxx-api.h"
 #include "vad-config.h"
@@ -173,13 +173,13 @@ int main(int argc, char *argv[]) {
         // Simulating online/streaming data input
         std::vector<VadSegment> segments = model->decode(samples.data() + i, n, last);
         for (const auto &seg : segments) {
-            std::string msg = std::format("[VadSegment] idx {} | start_ms {} | end_ms {}", seg.idx,
-                                          seg.start_ms, seg.end_ms);
+            std::stringstream ss;
+            ss << "[VadSegment] idx " << seg.idx << " | start_ms " << seg.start_ms << " | end_ms " << seg.end_ms;
             if (seg.end > 0) {
                 auto duration = seg.end_ms - seg.start_ms;
-                msg += std::format(" | duration {} ms", duration);
+                ss << " | duration " << duration << " ms";
             }
-            std::cout << msg << std::endl;
+            std::cout << ss.str() << std::endl;
         }
     }
 
