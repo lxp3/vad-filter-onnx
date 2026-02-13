@@ -5,7 +5,7 @@
 namespace VadFilterOnnx {
 
 class AutoVadModel::Impl {
-public:
+  public:
     // Handle mode: internal_model_ is the handle from VadModel::create
     // Instance mode: internal_model_ is the instance from handle->init()
     std::unique_ptr<VadModel> internal_model_;
@@ -18,7 +18,8 @@ AutoVadModel::AutoVadModel() : impl_(std::make_unique<Impl>()) {}
 
 AutoVadModel::~AutoVadModel() = default;
 
-std::unique_ptr<AutoVadModel> AutoVadModel::create(const std::string &path, int num_threads, int device_id) {
+std::unique_ptr<AutoVadModel> AutoVadModel::create(const std::string &path, int num_threads,
+                                                   int device_id) {
     auto model = VadModel::create(path, num_threads, device_id);
     if (!model) {
         return nullptr;
@@ -68,9 +69,6 @@ VadSegment AutoVadModel::flush() {
     return VadSegment();
 }
 
-std::vector<std::string> get_ort_available_providers() {
-    return Ort::GetAvailableProviders();
-}
+std::vector<std::string> get_ort_available_providers() { return Ort::GetAvailableProviders(); }
 
 } // namespace VadFilterOnnx
-

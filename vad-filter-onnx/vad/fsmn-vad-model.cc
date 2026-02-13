@@ -43,6 +43,7 @@ void FsmnVadModel::init_state() {
 
 std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t first_p,
                                                 int64_t last_p) {
+    // std::cout << "[vad] forward_frames | n " << n << std::endl;
     auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
     std::array<int64_t, 2> speech_shape = { 1, n };
     Ort::Value speech =
@@ -103,6 +104,9 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits) {
 }
 
 std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_finished) {
+    total_samples_ += n;
+    // std::cout << "[vad] total_samples " << total_samples_  << "," << "current_ " << current_ << std::endl;
+
     // 1. Accumulate all new data into reminder buffer to ensure no data loss
     if (n > 0) {
         reminder_.insert(reminder_.end(), data, data + n);
@@ -145,10 +149,13 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
             return {};
         }
 
+        // Ensure input samples are aligned to frame_shift_ (10ms) boundary
+        int aligned_samples = (static_cast<int>(reminder_.size()) / frame_shift_) * frame_shift_;
+        
         int64_t first_p = 2;
         int64_t last_p = input_finished ? 2 : 0;
         auto logits =
-            forward_frames(reminder_.data(), static_cast<int>(reminder_.size()), first_p, last_p);
+            forward_frames(reminder_.data(), aligned_samples, first_p, last_p);
         is_first_inference_ = false;
 
         if (input_finished) {
@@ -168,20 +175,40 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
     } else if (!input_finished) {
         // Normal state: process any new data beyond the 55ms reminder context
         if (reminder_.size() > static_cast<size_t>(reminder_limit)) {
-            auto logits =
-                forward_frames(reminder_.data(), static_cast<int>(reminder_.size()), 0, 0);
+            // Ensure input samples are aligned to frame_shift_ (10ms) boundary
+            int aligned_samples = (static_cast<int>(reminder_.size()) / frame_shift_) * frame_shift_;
+            
+            // Minimum samples required for no-padding inference (first_p=0, last_p=0):
+            // LFR needs at least 5 real frames -> 5 frames = (5-1)*160 + 400 = 1040 samples
+            int min_samples_no_padding = 4 * frame_shift_ + frame_length_; // 1040 samples
+            
+            if (aligned_samples >= min_samples_no_padding) {
+                auto logits =
+                    forward_frames(reminder_.data(), aligned_samples, 0, 0);
 
-            // Consume all produced scores (N_real - 4), leaving the required 55ms context
-            process_logits(logits);
-            // Precise erasure: keeps exactly the last 4 frames + any sub-frame remainder
-            reminder_.erase(reminder_.begin(), reminder_.begin() + (logits.size() * frame_shift_));
+                // Consume all produced scores (N_real - 4), leaving the required 55ms context
+                process_logits(logits);
+                // Precise erasure: keeps exactly the last 4 frames + any sub-frame remainder
+                reminder_.erase(reminder_.begin(), reminder_.begin() + (logits.size() * frame_shift_));
+            }
+            // If samples < min_samples, wait for more data
         }
     } else {
         // Final flush when input_finished = true
         if (!reminder_.empty()) {
-            auto logits =
-                forward_frames(reminder_.data(), static_cast<int>(reminder_.size()), 0, 2);
-            process_logits(logits);
+            // Ensure input samples are aligned to frame_shift_ (10ms) boundary
+            int aligned_samples = (static_cast<int>(reminder_.size()) / frame_shift_) * frame_shift_;
+            
+            // Use same minimum as normal inference to ensure model stability
+            // LFR needs at least 5 frames even with padding
+            int min_samples = 4 * frame_shift_ + frame_length_; // 1040 samples
+            
+            if (aligned_samples >= min_samples) {
+                auto logits =
+                    forward_frames(reminder_.data(), aligned_samples, 0, 2);
+                process_logits(logits);
+            }
+            // If samples < min_samples, skip final inference (loss < 65ms audio at end)
         }
         flush();
         reminder_.clear();

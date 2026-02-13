@@ -32,28 +32,26 @@ class SlidingWindowBit {
     /**
      * @brief Check if speech is detected within a given window size and threshold.
      * @param win_size The window size to check (must be <= max_size).
-     * @param threshold The number of frames that must be speech to trigger detection.
      */
-    bool check_speech(size_t win_size, size_t threshold) const {
+    size_t check_speech(size_t win_size) const {
         if (current_size < win_size)
-            return false;
+            return 0;
         uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
         uint64_t sub_window = window & sub_mask;
-        return std::popcount(sub_window) >= threshold;
+        return std::popcount(sub_window);
     }
 
     /**
      * @brief Check if silence is detected within a given window size and threshold.
      * @param win_size The window size to check (must be <= max_size).
-     * @param threshold The number of frames that must be silence to trigger detection.
      */
-    bool check_silence(size_t win_size, size_t threshold) const {
+    size_t check_silence(size_t win_size) const {
         if (current_size < win_size)
-            return false;
+            return 0;
         uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
         uint64_t sub_window = window & sub_mask;
         size_t num_zeros = win_size - std::popcount(sub_window);
-        return num_zeros >= threshold;
+        return num_zeros;
     }
 
     // 统计 1 的数量 (O(1))

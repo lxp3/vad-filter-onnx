@@ -22,7 +22,7 @@ class TenVadModel : public VadModel {
     VadType type_ = VadType::TenVad;
     static constexpr std::array<int64_t, 2> state_shape_{ 1, 64 };
     static constexpr std::array<int64_t, 3> cache_shape_{ 1, 2, 41 };
-    
+
     Ort::Value h1_{ nullptr };
     Ort::Value c1_{ nullptr };
     Ort::Value h2_{ nullptr };

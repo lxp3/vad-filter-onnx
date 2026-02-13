@@ -1,9 +1,9 @@
 #pragma once
 
+#include "vad-config.h"
 #include <memory>
 #include <string>
 #include <vector>
-#include "vad-config.h"
 
 namespace VadFilterOnnx {
 
@@ -12,7 +12,7 @@ namespace VadFilterOnnx {
  * The signatures match VadFilterOnnx::VadModel for consistency.
  */
 class AutoVadModel {
-public:
+  public:
     /**
      * @brief Create a model handle (loads ONNX session).
      * @param path Path to the ONNX model.
@@ -20,7 +20,8 @@ public:
      * @param device_id Device ID (-1 for CPU, >=0 for GPU).
      * @return Unique pointer to AutoVadModel handle.
      */
-    static std::unique_ptr<AutoVadModel> create(const std::string &path, int num_threads = 1, int device_id = -1);
+    static std::unique_ptr<AutoVadModel> create(const std::string &path, int num_threads = 1,
+                                                int device_id = -1);
 
     /**
      * @brief Initialize a model instance for inference.
@@ -43,7 +44,7 @@ public:
 
     ~AutoVadModel();
 
-private:
+  private:
     AutoVadModel(); // Private constructor used by factory
     class Impl;
     std::unique_ptr<Impl> impl_;

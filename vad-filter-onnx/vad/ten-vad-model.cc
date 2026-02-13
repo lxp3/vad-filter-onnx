@@ -20,7 +20,8 @@ void TenVadModel::init_state() {
         c1_ = Ort::Value::CreateTensor<float>(allocator_, state_shape_.data(), state_shape_.size());
         h2_ = Ort::Value::CreateTensor<float>(allocator_, state_shape_.data(), state_shape_.size());
         c2_ = Ort::Value::CreateTensor<float>(allocator_, state_shape_.data(), state_shape_.size());
-        conv_cache_ = Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(), cache_shape_.size());
+        conv_cache_ =
+            Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(), cache_shape_.size());
     }
     Fill<float>(&h1_, 0.0f);
     Fill<float>(&c1_, 0.0f);
@@ -43,7 +44,7 @@ float TenVadModel::forward(float *data, int n) {
 
     std::vector<Ort::Value> inputs;
     inputs.reserve(6);
-    
+
     // Inputs: input, h1, c1, h2, c2, cache
     inputs.push_back(std::move(x));
     inputs.push_back(std::move(h1_));
