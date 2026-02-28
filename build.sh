@@ -2,6 +2,8 @@
 
 set -e
 
+export http_proxy="http://192.168.58.72:7890"
+export https_proxy="http://192.168.58.72:7890" 
 # Configuration
 BUILD_SHARED_LIBS="ON"
 
@@ -21,7 +23,7 @@ cmake -B "$BUILD_DIR" -S . \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS="$BUILD_SHARED_LIBS" \
     -DENABLE_GPU=OFF \
-    -DENABLE_PYTHON=ON
+    -DENABLE_PYTHON=OFF
 
 echo -e "\n\033[0;36m--- Building vad-filter-onnx ---\033[0m"
 
