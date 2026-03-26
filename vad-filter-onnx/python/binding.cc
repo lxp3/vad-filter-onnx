@@ -58,15 +58,27 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
 
     py::class_<AutoVadModel>(m, "AutoVadModel", "High-level VAD model API")
         .def(py::init([](const std::string &path, int num_threads, int device_id) {
+                 py::gil_scoped_release release;
                  return AutoVadModel::create(path, num_threads, device_id);
              }),
              py::arg("path"), py::arg("num_threads") = 1, py::arg("device_id") = -1,
              "Create a model handle by loading an ONNX model from the given path.")
-        .def_static("create", &AutoVadModel::create, py::arg("path"), py::arg("num_threads") = 1,
-                    py::arg("device_id") = -1,
-                    "Create a model handle by loading an ONNX model from the given path (Legacy static method).")
-        .def("init", &AutoVadModel::init, py::arg("config"),
-             "Initialize a model instance for inference with the given configuration.")
+        .def_static(
+            "create",
+            [](const std::string &path, int num_threads, int device_id) {
+                py::gil_scoped_release release;
+                return AutoVadModel::create(path, num_threads, device_id);
+            },
+            py::arg("path"), py::arg("num_threads") = 1, py::arg("device_id") = -1,
+            "Create a model handle by loading an ONNX model from the given path (Legacy static method).")
+        .def(
+            "init",
+            [](AutoVadModel &self, const VadConfig &config) {
+                py::gil_scoped_release release;
+                return self.init(config);
+            },
+            py::arg("config"),
+            "Initialize a model instance for inference with the given configuration.")
         .def(
             "decode",
             [](AutoVadModel &self, py::array_t<float> data, bool input_finished) {
@@ -74,15 +86,32 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Input data must be a 1D array");
                 }
+                py::gil_scoped_release release;
                 return self.decode(static_cast<float *>(buf.ptr), static_cast<int>(buf.size),
                                    input_finished);
             },
             py::arg("data"), py::arg("input_finished") = false,
             "Process audio data and return detected segments.")
-        .def("reset", &AutoVadModel::reset, "Reset the model internal state.")
-        .def("flush", &AutoVadModel::flush,
-             "Flush remaining audio and return the final segment if any.");
+        .def(
+            "reset",
+            [](AutoVadModel &self) {
+                py::gil_scoped_release release;
+                self.reset();
+            },
+            "Reset the model internal state.")
+        .def(
+            "flush",
+            [](AutoVadModel &self) {
+                py::gil_scoped_release release;
+                return self.flush();
+            },
+            "Flush remaining audio and return the final segment if any.");
 
-    m.def("get_ort_available_providers", &get_ort_available_providers,
-          "Get list of available ONNX Runtime execution providers.");
+    m.def(
+        "get_ort_available_providers",
+        []() {
+            py::gil_scoped_release release;
+            return get_ort_available_providers();
+        },
+        "Get list of available ONNX Runtime execution providers.");
 }
