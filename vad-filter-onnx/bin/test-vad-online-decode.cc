@@ -167,15 +167,17 @@ int main(int argc, char *argv[]) {
     std::cout << "Starting VAD online decoding simulation using AutoVadModel..." << std::endl;
     for (int i = 0; i < total_samples; i += chunk_size) {
         int n = std::min(chunk_size, total_samples - i);
-        bool last = (i + n >= total_samples);
-        // printf("Processing chunk %d of %d samples, last: %d\n", i, total_samples, last);
+        bool input_finished = (i + n >= total_samples);
 
         // Simulating online/streaming data input
-        std::vector<VadSegment> segments = model->decode(samples.data() + i, n, last);
+        std::vector<VadSegment> segments = model->decode(samples.data() + i, n, input_finished);
         for (const auto &seg : segments) {
             std::stringstream ss;
-            ss << "[VadSegment] idx " << seg.idx << " | start_ms " << seg.start_ms << " | end_ms " << seg.end_ms;
-            if (seg.end > 0) {
+            if (seg.end < 0) {
+                ss << "[VoiceStart] idx " << seg.idx << " | start_ms " << seg.start_ms;
+            }
+            else if (seg.end > 0) {
+                ss << "[VoiceEnd] idx " << seg.idx << " | start_ms " << seg.start_ms << " | end_ms " << seg.end_ms;
                 auto duration = seg.end_ms - seg.start_ms;
                 ss << " | duration " << duration << " ms";
             }

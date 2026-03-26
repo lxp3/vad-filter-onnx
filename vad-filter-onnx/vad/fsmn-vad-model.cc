@@ -32,18 +32,23 @@ std::unique_ptr<VadModel> FsmnVadModel::init(const VadConfig &config) {
 
 void FsmnVadModel::init_state() {
     is_first_inference_ = true;
-    caches_.clear();
     reminder_.clear(); // Ensure reminder buffer is cleared on state reset
+
+    if (caches_.empty()) {
+        // Initialize caches on first use
+        for (int i = 0; i < 4; ++i) {
+            caches_.emplace_back(
+                Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(), cache_shape_.size()));
+        }
+    }
+
     for (int i = 0; i < 4; ++i) {
-        caches_.emplace_back(
-            Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(), cache_shape_.size()));
-        Fill<float>(&caches_.back(), 0.0f);
+        Fill<float>(&caches_[i], 0.0f);
     }
 }
 
 std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t first_p,
                                                 int64_t last_p) {
-    // std::cout << "[vad] forward_frames | n " << n << std::endl;
     auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
     std::array<int64_t, 2> speech_shape = { 1, n };
     Ort::Value speech =
@@ -105,7 +110,6 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits) {
 
 std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_finished) {
     total_samples_ += n;
-    // std::cout << "[vad] total_samples " << total_samples_  << "," << "current_ " << current_ << std::endl;
 
     // 1. Accumulate all new data into reminder buffer to ensure no data loss
     if (n > 0) {
@@ -152,6 +156,17 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
         // Ensure input samples are aligned to frame_shift_ (10ms) boundary
         int aligned_samples = (static_cast<int>(reminder_.size()) / frame_shift_) * frame_shift_;
         
+        // Guard against zero-length inference (e.g., very short tail with input_finished=true)
+        if (aligned_samples == 0) {
+            if (input_finished) {
+                flush();
+                reminder_.clear();
+            }
+            std::vector<VadSegment> result = std::move(segs_);
+            segs_.clear();
+            return result;
+        }
+
         int64_t first_p = 2;
         int64_t last_p = input_finished ? 2 : 0;
         auto logits =

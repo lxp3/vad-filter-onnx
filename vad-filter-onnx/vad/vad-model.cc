@@ -97,17 +97,6 @@ void VadModel::on_voice_start() {
     seg.start = start_;
     seg.start_ms = start_ / samples_per_ms_;
     segs_.push_back(seg);
-
-
-    std::stringstream ss;
-    ss << "[vad] on_voice_start | lookback_speech_frames " << lookback_speech_frames;
-    ss << " | lookback_speech_samples " << lookback_speech_samples;
-    ss << " | current_ " << current_;
-    ss << " | current_ms " << current_ / samples_per_ms_ << "ms";
-    ss << " | start " << start_;
-    ss << " | start_ms " << start_ / samples_per_ms_ << "ms";
-    ss << " | seg_idx_ " << seg_idx_;
-    std::cout << ss.str() << std::endl;
 }
 
 void VadModel::on_voice_end() {
@@ -128,16 +117,6 @@ void VadModel::on_voice_end() {
                            end_ / samples_per_ms_);
     }
 
-    std::stringstream ss;
-    ss << "[vad] on_voice_end | lookback_silence_frames " << lookback_silence_frames;
-    ss << " | lookback_silence_samples " << lookback_silence_samples;
-    ss << " | current_ " << current_;
-    ss << " | current_ms " << current_ / samples_per_ms_ << "ms";
-    ss << " | end " << end_;
-    ss << " | end_ms " << end_ / samples_per_ms_ << "ms";
-    ss << " | seg_idx_ " << seg_idx_;
-    std::cout << ss.str() << std::endl;
-
     last_end_ = end_;
     start_ = -1;
     end_ = -1;
@@ -147,12 +126,6 @@ void VadModel::on_voice_end() {
 void VadModel::update_frame_state(float prob) {
     bool is_speech_frame = prob > config_.threshold;
     window_detector_->push(is_speech_frame);
-    // std::stringstream ss;
-    // ss << "[vad] timestamp " << current_ / samples_per_ms_ << "ms | prob " << prob;
-    // ss << " | is_speech_frame " << is_speech_frame;
-    // ss << " | get_num_ones " << window_detector_->get_num_ones();
-    // ss << " | get_num_zeros " << window_detector_->get_num_zeros();
-    
 
     if (start_ == -1) {
         // Current state: Silence. Check if we should switch to Speech.
