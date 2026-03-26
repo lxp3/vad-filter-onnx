@@ -4,6 +4,7 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 option(BUILD_SHARED_LIBS "Whether to build shared libraries" ON)
 option(ENABLE_GPU "Enable GPU support for ONNX Runtime" OFF)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
+set(GLIBCXX_USE_CXX11_ABI "0" CACHE STRING "Value for _GLIBCXX_USE_CXX11_ABI")
 
 if(NOT BUILD_SHARED_LIBS STREQUAL "ON" AND ENABLE_GPU STREQUAL "ON")
     message(FATAL_ERROR "ENABLE_GPU=ON is not supported when BUILD_SHARED_LIBS is not ON. Please set ENABLE_GPU=OFF or build with BUILD_SHARED_LIBS=ON.")
@@ -29,7 +30,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=${GLIBCXX_USE_CXX11_ABI})
 
 # 添加cmake模块路径
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -64,4 +65,3 @@ if(BUILD_SHARED_LIBS STREQUAL "ON")
         install(FILES ${ORT_LIBS} DESTINATION lib)
     endif()
 endif()
-

@@ -13,12 +13,13 @@ permissions:
 ########################
 jobs:
   build-linux:
-    name: Linux (${{ matrix.gpu == 'ON' && 'GPU' || 'CPU' }})
+    name: Linux (${{ matrix.gpu == 'ON' && 'GPU' || 'CPU' }}, ABI${{ matrix.abi }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         gpu: [OFF, ON]
+        abi: [0, 1]
 
     container: quay.io/pypa/manylinux_2_28_x86_64
 
@@ -29,7 +30,8 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_GPU=${{ matrix.gpu }}
+            -DENABLE_GPU=${{ matrix.gpu }} \
+            -DGLIBCXX_USE_CXX11_ABI=${{ matrix.abi }}
 
       - name: Build
         run: cmake --build build -j 4
@@ -40,14 +42,14 @@ jobs:
       - name: Package
         run: |
           gpu_tag=${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
-          pkg="vad-filter-onnx-${{ github.ref_name }}-linux-$gpu_tag-x64"
+          pkg="vad-filter-onnx-${{ github.ref_name }}-linux-$gpu_tag-abi${{ matrix.abi }}-x64"
           mv install/vad-filter-onnx install/$pkg
           tar -czvf $pkg.tar.gz -C install $pkg
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
+          name: linux-${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}-abi${{ matrix.abi }}
           path: vad-filter-onnx-${{ github.ref_name }}-linux-*.tar.gz
 
 

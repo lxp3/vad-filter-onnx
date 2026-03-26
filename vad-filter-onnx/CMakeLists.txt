@@ -2,7 +2,6 @@ project(vad_lib LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 
 # Source files
 file(GLOB_RECURSE SOURCES 
@@ -51,5 +50,4 @@ install(DIRECTORY include/
 if(ENABLE_PYTHON)
     add_subdirectory(python)
 endif()
-
 
