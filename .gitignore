@@ -7,6 +7,7 @@ deprecated/
 .cursor/
 wer/
 test-vad.sh
+.codex
 *.o
 *.a
 *.so
