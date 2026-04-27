@@ -8,6 +8,7 @@ enum class VadType {
     SileroVadV5,
     FsmnVad,
     TenVad,
+    FireRedVad,
     None,
 };
 
