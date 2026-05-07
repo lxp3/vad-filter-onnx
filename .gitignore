@@ -17,3 +17,4 @@ test-vad.sh
 *.txt
 !CMakeLists.txt
 *.log
+*.wav

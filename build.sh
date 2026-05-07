@@ -6,7 +6,7 @@ export http_proxy="http://192.168.58.72:7890"
 export https_proxy="http://192.168.58.72:7890" 
 # Configuration
 BUILD_SHARED_LIBS="ON"
-GLIBCXX_USE_CXX11_ABI="${1:-0}"
+GLIBCXX_USE_CXX11_ABI="${1:-1}"
 
 if [ "$BUILD_SHARED_LIBS" = "ON" ]; then
     BUILD_DIR="build_shared"

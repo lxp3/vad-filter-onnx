@@ -6,7 +6,7 @@ import avioflow
 from vad_filter_onnx import AutoVadModel, VadConfig
 
 SAMPLE_RATE = 16000
-CHUNK_TIME = 0.02
+CHUNK_TIME = 0.1
 CHUNK_SIZE = int(SAMPLE_RATE * CHUNK_TIME)
 
 

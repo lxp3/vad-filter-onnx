@@ -8,8 +8,9 @@ export PYTHONPATH=$(pwd)/${build_dir}/vad-filter-onnx/python:${PYTHONPATH}
 
 # mp3_path=public/TownTheme.mp3
 # wav_path=public/TownTheme.wav
-audio_path="public/6666.09-59-02.c79b9f1c-c613-41d0-8e02-94e89ca3bca4.wav"
+#audio_path="public/6666.09-59-02.c79b9f1c-c613-41d0-8e02-94e89ca3bca4.wav"
 #wav_path="public/zh.wav/6666.09-59-02.c79b9f1c-c613-41d0-8e02-94e89ca3bca4.16k.wav"
+audio_path="70a0c1e9-bb6e-4036-9c75-d327296701b4_8.wav"
 if [ ${stage} -eq -1 ]; then
     ffmpeg -i ${audio_path} \
     -map_channel 0.0.0 \
@@ -19,32 +20,33 @@ if [ ${stage} -eq -1 ]; then
     ${wav_path}
 fi
 
-audio_path=public/wavs/zh.wav
+# audio_path=public/wavs/zh.wav
 # silero_vad_v4_onnx_path="public/models/silero_vad.v4.onnx"
 # silero_vad_v6_onnx_path="public/models/silero_vad_16k_op15.v6.onnx"
-fsmn_vad_onnx_path="public/models/fsmn_vad.16k.onnx"
+onnx_path="public/models/fsmn_vad.16k.onnx"
+#onnx_path="public/models/silero_vad.v4.onnx"
 if [ ${stage} -eq 0 ]; then
     ./build_shared/test-vad-online-decode \
-        --model-path ${fsmn_vad_onnx_path} \
+        --model-path ${onnx_path} \
         --wav-path ${audio_path} \
-        --sample-rate 16000 \
+        --sample-rate 8000 \
         --threshold 0.4 \
         --chunk-size-ms 100 \
-        --max-speech-ms 5000
+        --max-speech-ms 15000
 fi
 
 if [ ${stage} -eq 1 ]; then
     python3 tests/python/test-online-vad.py \
-        --model-path ${fsmn_vad_onnx_path} \
+        --model-path ${onnx_path} \
         --audio-path ${audio_path} \
-        --threshold 0.4 
+        --threshold 0.8
 fi
 
 if [ ${stage} -eq 2 ]; then
     python3 tests/python/test-offline-vad.py \
-        --model-path ${fsmn_vad_onnx_path} \
+        --model-path ${onnx_path} \
         --audio-path ${audio_path} \
-        --threshold 0.4 
+        --threshold 0.8 
 fi
 
 # testdir=/data/user/lxp/deploy/label-studio/projects/cn/data
@@ -60,7 +62,7 @@ if [ ${stage} -eq 3 ]; then
     mkdir -p ${werdir}
     rm -rf ${savedir} && mkdir -p ${savedir}
     python tests/python/test-online-vad-threads.py \
-        --model-path ${fsmn_vad_onnx_path} \
+        --model-path ${onnx_path} \
         --wavscp ${wavscp} \
         --vadscp ${vadscp} \
         --save-dir ${savedir} \
