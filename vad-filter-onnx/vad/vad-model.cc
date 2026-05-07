@@ -4,8 +4,9 @@
 #include "vad/fsmn-vad-model.h"
 #include "vad/silero-vad-model.h"
 #include "vad/ten-vad-model.h"
-#include <sstream>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 namespace VadFilterOnnx {
 
@@ -58,8 +59,14 @@ VadModel::VadModel(const VadModel &other, const VadConfig &config, int frame_shi
       frame_length_(frame_length),
       frame_shift_(frame_shift) {
 
+    apply_config(config);
+}
+
+void VadModel::apply_config(const VadConfig &config) {
+    config_ = config;
+    configured_ = true;
     samples_per_ms_ = config.sample_rate / 1000;
-    int frame_shift_ms = frame_shift / samples_per_ms_;
+    int frame_shift_ms = frame_shift_ / samples_per_ms_;
     speech_window_size_frames_ =
         (config.speech_window_size_ms + frame_shift_ms - 1) / frame_shift_ms;
     speech_window_threshold_frames_ =
@@ -79,6 +86,27 @@ VadModel::VadModel(const VadModel &other, const VadConfig &config, int frame_shi
     window_detector_ = std::make_unique<SlidingWindowBit>(max_win_frames);
 }
 
+void VadModel::setup_config(const VadConfig &config) {
+    if (!configured_) {
+        throw std::runtime_error("setup_config is only supported on an initialized model "
+                                 "instance returned by init().");
+    }
+    if (config.sample_rate != config_.sample_rate) {
+        throw std::runtime_error("Changing sample_rate via setup_config is not supported; "
+                                 "please create a new model instance with init().");
+    }
+    apply_config(config);
+    reset();
+}
+
+const VadConfig &VadModel::get_config() const {
+    if (!configured_) {
+        throw std::runtime_error("get_config is only supported on an initialized model "
+                                 "instance returned by init().");
+    }
+    return config_;
+}
+
 void VadModel::reset() {
     init_state();
     current_ = 0;
@@ -87,6 +115,10 @@ void VadModel::reset() {
     end_ = -1;
     seg_idx_ = 0;
     segs_.clear();
+    reminder_.clear();
+    if (window_detector_) {
+        window_detector_->reset();
+    }
 }
 
 void VadModel::on_voice_start() {

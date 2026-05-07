@@ -216,6 +216,21 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
             py::arg("data"), py::arg("input_finished") = false,
             "Process audio data and return detected segments.")
         .def(
+            "setup_config",
+            [](AutoVadModel &self, const VadConfig &config) {
+                py::gil_scoped_release release;
+                self.setup_config(config);
+            },
+            py::arg("config"),
+            "Update VAD configuration and reset the model internal state.")
+        .def(
+            "get_config",
+            [](const AutoVadModel &self) {
+                py::gil_scoped_release release;
+                return self.get_config();
+            },
+            "Return the current VAD configuration.")
+        .def(
             "reset",
             [](AutoVadModel &self) {
                 py::gil_scoped_release release;

@@ -39,6 +39,17 @@ class AutoVadModel {
      */
     std::vector<VadSegment> decode(float *data, int n, bool input_finished);
 
+    /**
+     * @brief Update VAD configuration on an initialized inference instance.
+     * @param config New VAD configuration. sample_rate must match the init config.
+     */
+    void setup_config(const VadConfig &config);
+
+    /**
+     * @brief Return the current VAD configuration.
+     */
+    VadConfig get_config() const;
+
     void reset();
     VadSegment flush();
 

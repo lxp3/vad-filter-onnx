@@ -1,6 +1,7 @@
 #include "vad-filter-onnx-cxx-api.h"
 #include "vad/vad-model.h"
 #include <onnxruntime_cxx_api.h>
+#include <stdexcept>
 
 namespace VadFilterOnnx {
 
@@ -54,6 +55,20 @@ std::vector<VadSegment> AutoVadModel::decode(float *data, int n, bool input_fini
         return {};
     }
     return impl_->internal_model_->decode(data, n, input_finished);
+}
+
+void AutoVadModel::setup_config(const VadConfig &config) {
+    if (!impl_->internal_model_) {
+        throw std::runtime_error("Cannot setup_config on an empty AutoVadModel.");
+    }
+    impl_->internal_model_->setup_config(config);
+}
+
+VadConfig AutoVadModel::get_config() const {
+    if (!impl_->internal_model_) {
+        throw std::runtime_error("Cannot get_config on an empty AutoVadModel.");
+    }
+    return impl_->internal_model_->get_config();
 }
 
 void AutoVadModel::reset() {

@@ -22,6 +22,8 @@ class VadModel {
     virtual std::unique_ptr<VadModel> init(const VadConfig &config) = 0;
 
     virtual std::vector<VadSegment> decode(float *data, int n, bool input_finished);
+    void setup_config(const VadConfig &config);
+    const VadConfig &get_config() const;
     VadSegment flush();
     void reset();
 
@@ -31,12 +33,14 @@ class VadModel {
 
     virtual float forward(float *data, int n) = 0;
     virtual void init_state() = 0;
+    void apply_config(const VadConfig &config);
     void update_frame_state(float prob);
     void on_voice_start();
     void on_voice_end();
 
     VadType type_ = VadType::None;
     VadConfig config_;
+    bool configured_ = false;
     std::shared_ptr<Ort::Session> session_;
     std::vector<const char *> input_names_;
     std::vector<const char *> output_names_;
