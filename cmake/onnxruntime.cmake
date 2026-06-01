@@ -61,7 +61,12 @@ endif()
 
 # Get filename from URL
 get_filename_component(ONNXRUNTIME_FILENAME ${ONNXRUNTIME_URL} NAME)
-set(DOWNLOAD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public/downloads")
+set(VAD_FILTER_ONNX_ORT_DOWNLOAD_DIR
+    "${CMAKE_BINARY_DIR}/_deps/onnxruntime-downloads"
+    CACHE PATH
+    "Directory used to cache downloaded ONNX Runtime archives"
+)
+set(DOWNLOAD_DIR "${VAD_FILTER_ONNX_ORT_DOWNLOAD_DIR}")
 set(LOCAL_ZIP_PATH "${DOWNLOAD_DIR}/${ONNXRUNTIME_FILENAME}")
 message(STATUS "ONNX Runtime URL: ${ONNXRUNTIME_URL}")
 message(STATUS "ONNX Runtime filename: ${ONNXRUNTIME_FILENAME}")

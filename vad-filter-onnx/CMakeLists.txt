@@ -18,6 +18,10 @@ if(BUILD_SHARED_LIBS STREQUAL "ON")
 else()
     add_library(vad_filter_onnx STATIC ${SOURCES})
 endif()
+add_library(vad_filter_onnx::vad_filter_onnx ALIAS vad_filter_onnx)
+
+target_compile_features(vad_filter_onnx PUBLIC cxx_std_20)
+target_compile_definitions(vad_filter_onnx PUBLIC _GLIBCXX_USE_CXX11_ABI=${GLIBCXX_USE_CXX11_ABI})
 
 target_include_directories(vad_filter_onnx PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -30,9 +34,11 @@ else()
     target_link_libraries(vad_filter_onnx PUBLIC onnxruntime)
 endif()
 
-# Test
-add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
-target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx)
+if(VAD_FILTER_ONNX_BUILD_TESTS)
+    # Test
+    add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
+    target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx)
+endif()
 
 # Installation
 install(TARGETS vad_filter_onnx
@@ -50,4 +56,3 @@ install(DIRECTORY include/
 if(ENABLE_PYTHON)
     add_subdirectory(python)
 endif()
-

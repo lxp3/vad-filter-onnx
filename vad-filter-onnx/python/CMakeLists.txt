@@ -4,7 +4,7 @@ include(pybind11)
 pybind11_add_module(vad_filter_onnx_python binding.cc)
 
 # Link to the main library
-target_link_libraries(vad_filter_onnx_python PRIVATE vad_filter_onnx)
+target_link_libraries(vad_filter_onnx_python PRIVATE vad_filter_onnx::vad_filter_onnx)
 
 # Include directories
 target_include_directories(vad_filter_onnx_python PRIVATE 
