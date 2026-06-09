@@ -110,6 +110,7 @@ const VadConfig &VadModel::get_config() const {
 void VadModel::reset() {
     init_state();
     current_ = 0;
+    received_samples_ = 0;
     last_end_ = 0;
     start_ = -1;
     end_ = -1;
@@ -136,12 +137,12 @@ void VadModel::on_voice_start() {
     segs_.push_back(seg);
 }
 
-void VadModel::on_voice_end() {
+void VadModel::on_voice_end(int end_limit_samples) {
     // Precise end: current - consecutive silence frames + padding
     int lookback_silence_frames = static_cast<int>(window_detector_->num_right_zeros());
     int lookback_silence_samples = lookback_silence_frames * frame_shift_;
     end_ = current_ - lookback_silence_samples + right_padding_samples_;
-    end_ = std::min(end_, current_);
+    end_ = std::min(end_, end_limit_samples);
 
     // If on_voice_start was called in the same decode() call, segs_ already has a partial segment.
     if (!segs_.empty() && segs_.back().end == -1) {
@@ -175,7 +176,7 @@ void VadModel::update_frame_state(float prob) {
         // Current state: Speech. Check if we should switch to Silence.
         size_t silence_count = window_detector_->check_silence(silence_window_size_frames_);
         if (silence_count >= silence_window_threshold_frames_) {
-            on_voice_end();
+            on_voice_end(current_);
         }
 
         // ss << " | silence_count " << silence_count;
@@ -186,7 +187,7 @@ void VadModel::update_frame_state(float prob) {
 
 VadSegment VadModel::flush() {
     if (start_ != -1) {
-        on_voice_end();
+        on_voice_end(std::max(current_, received_samples_));
         if (!segs_.empty()) {
             return segs_.back();
         }
@@ -198,6 +199,7 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
     if (n == 0 && !input_finished) {
         return {};
     }
+    received_samples_ += n;
 
     float *ptr = data;
     int len = n;
@@ -215,7 +217,7 @@ std::vector<VadSegment> VadModel::decode(float *data, int n, bool input_finished
         // Check if current speech segment exceeds maximum allowed duration
         if (start_ != -1) {
             if (current_ - start_ > max_speech_samples_) {
-                on_voice_end();
+                on_voice_end(current_);
                 on_voice_start();
             }
         }

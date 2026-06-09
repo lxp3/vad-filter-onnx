@@ -101,7 +101,7 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits) {
 
         if (start_ != -1) {
             if (current_ - start_ > max_speech_samples_) {
-                on_voice_end();
+                on_voice_end(current_);
                 on_voice_start();
             }
         }
@@ -109,6 +109,7 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits) {
 }
 
 std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_finished) {
+    received_samples_ += n;
     total_samples_ += n;
 
     // 1. Accumulate all new data into reminder buffer to ensure no data loss

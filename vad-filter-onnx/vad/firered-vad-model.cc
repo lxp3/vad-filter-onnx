@@ -70,13 +70,14 @@ void FireredVadModel::process_probs(const std::vector<float> &probs) {
         current_ += frame_shift_;
 
         if (start_ != -1 && current_ - start_ > max_speech_samples_) {
-            on_voice_end();
+            on_voice_end(current_);
             on_voice_start();
         }
     }
 }
 
 std::vector<VadSegment> FireredVadModel::decode(float *data, int n, bool input_finished) {
+    received_samples_ += n;
     if (n > 0) {
         reminder_.insert(reminder_.end(), data, data + n);
     }

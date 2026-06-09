@@ -36,7 +36,7 @@ class VadModel {
     void apply_config(const VadConfig &config);
     void update_frame_state(float prob);
     void on_voice_start();
-    void on_voice_end();
+    void on_voice_end(int end_limit_samples);
 
     VadType type_ = VadType::None;
     VadConfig config_;
@@ -63,6 +63,7 @@ class VadModel {
     int start_ = -1; // Speech start position, -1 means silence
     int end_ = -1;   // Speech end position, -1 means not ended
     int current_ = 0;
+    int received_samples_ = 0;
     int last_end_ = 0;
     int seg_idx_ = 0;
     std::vector<VadSegment> segs_;
