@@ -28,8 +28,6 @@ class FsmnVadModel : public VadModel {
     static constexpr std::array<int64_t, 4> cache_shape_{ 1, 128, 19, 1 };
     bool is_first_inference_ = true;
 
-    // debug
-    int total_samples_ = 0;
 };
 
 } // namespace VadFilterOnnx

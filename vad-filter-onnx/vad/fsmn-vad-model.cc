@@ -110,7 +110,6 @@ void FsmnVadModel::process_logits(const std::vector<float> &logits) {
 
 std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_finished) {
     received_samples_ += n;
-    total_samples_ += n;
 
     // 1. Accumulate all new data into reminder buffer to ensure no data loss
     if (n > 0) {
