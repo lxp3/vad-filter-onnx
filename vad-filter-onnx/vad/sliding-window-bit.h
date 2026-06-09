@@ -3,26 +3,25 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
-#include <iostream>
 #include <string>
+#include <vector>
 
 namespace VadFilterOnnx {
 
 class SlidingWindowBit {
   public:
-    SlidingWindowBit(size_t max_size) : window(0), current_size(0) {
-        if (max_size > 64) {
-            std::cerr << "Warning: SlidingWindowBit max_size (" << max_size
-                      << ") exceeds 64. Capping to 64." << std::endl;
-        }
-        this->max_size = std::min(max_size, (size_t)64);
-        // 构造掩码，用于清理移出窗口的高位数据
-        mask = (this->max_size >= 64) ? ~0ULL : (1ULL << this->max_size) - 1;
-    }
+    SlidingWindowBit(size_t max_size)
+        : window(block_count(max_size), 0), max_size(max_size), current_size(0) {}
 
     void push(bool value) {
-        // FIFO: 左移腾出最低位，填入新值
-        window = ((window << 1) | (value ? 1ULL : 0ULL)) & mask;
+        // FIFO: shift left to make bit 0 available for the newest value.
+        uint64_t carry = value ? 1ULL : 0ULL;
+        for (auto &block : window) {
+            uint64_t next_carry = block >> 63;
+            block = (block << 1) | carry;
+            carry = next_carry;
+        }
+        clear_unused_bits();
 
         if (current_size < max_size) {
             current_size++;
@@ -36,9 +35,7 @@ class SlidingWindowBit {
     size_t check_speech(size_t win_size) const {
         if (current_size < win_size)
             return 0;
-        uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
-        uint64_t sub_window = window & sub_mask;
-        return std::popcount(sub_window);
+        return count_ones(std::min(win_size, max_size));
     }
 
     /**
@@ -48,14 +45,12 @@ class SlidingWindowBit {
     size_t check_silence(size_t win_size) const {
         if (current_size < win_size)
             return 0;
-        uint64_t sub_mask = (win_size >= 64) ? ~0ULL : (1ULL << win_size) - 1;
-        uint64_t sub_window = window & sub_mask;
-        size_t num_zeros = win_size - std::popcount(sub_window);
-        return num_zeros;
+        win_size = std::min(win_size, max_size);
+        return win_size - count_ones(win_size);
     }
 
-    // 统计 1 的数量 (O(1))
-    size_t get_num_ones() const { return std::popcount(window); }
+    // Count 1s in the current valid window.
+    size_t get_num_ones() const { return count_ones(current_size); }
 
     size_t get_num_zeros() const { return current_size - get_num_ones(); }
 
@@ -65,59 +60,126 @@ class SlidingWindowBit {
     size_t num_right_zeros() const {
         if (current_size == 0)
             return 0;
-        // 如果最低位是 1，则返回 0；否则返回低位连续 0 的个数
-        if (window & 1ULL)
-            return 0;
-        return std::min((size_t)std::countr_zero(window | ~mask | (1ULL << current_size)),
-                        current_size);
+        size_t count = 0;
+        while (count < current_size && !bit_at(count)) {
+            count++;
+        }
+        return count;
     }
 
     // 从右侧（最新）数连续的 1
     size_t num_right_ones() const {
         if (current_size == 0)
             return 0;
-        if (!(window & 1ULL))
-            return 0;
-        return std::countr_zero(~window);
+        size_t count = 0;
+        while (count < current_size && bit_at(count)) {
+            count++;
+        }
+        return count;
     }
 
     // 从左侧（最旧进入的一侧）数连续 of 0
     size_t num_left_zeros() const {
         if (current_size == 0)
             return 0;
-        // 需要对齐到窗口的“左端”
-        // 窗口有效位在 [0, current_size-1]，最旧的位在 index = current_size-1
-        uint64_t reversed_window = window << (64 - current_size);
-        return std::countl_zero(reversed_window);
+        size_t count = 0;
+        size_t index = current_size;
+        while (index > 0) {
+            index--;
+            if (bit_at(index))
+                break;
+            count++;
+        }
+        return count;
     }
 
     // 从左侧（最旧）数连续的 1
     size_t num_left_ones() const {
         if (current_size == 0)
             return 0;
-        uint64_t reversed_window = window << (64 - current_size);
-        return std::countl_one(reversed_window);
+        size_t count = 0;
+        size_t index = current_size;
+        while (index > 0) {
+            index--;
+            if (!bit_at(index))
+                break;
+            count++;
+        }
+        return count;
     }
 
     void reset() {
-        window = 0;
+        std::fill(window.begin(), window.end(), 0);
         current_size = 0;
     }
 
-    void reverse() { window = (~window) & mask; }
+    void reverse() {
+        for (auto &block : window) {
+            block = ~block;
+        }
+        clear_bits_from(current_size);
+    }
 
     std::string to_string() const {
         std::string s;
         s.reserve(current_size);
-        for (int i = static_cast<int>(current_size) - 1; i >= 0; --i) {
-            s += ((window >> i) & 1ULL) ? '1' : '0';
+        size_t index = current_size;
+        while (index > 0) {
+            index--;
+            s += bit_at(index) ? '1' : '0';
         }
         return s;
     }
 
   private:
-    uint64_t window;
-    uint64_t mask;
+    static size_t block_count(size_t size) { return (size + 63) / 64; }
+
+    static uint64_t low_bits_mask(size_t bits) {
+        if (bits == 0)
+            return 0;
+        if (bits >= 64)
+            return ~0ULL;
+        return (1ULL << bits) - 1;
+    }
+
+    bool bit_at(size_t index) const {
+        return (window[index / 64] & (1ULL << (index % 64))) != 0;
+    }
+
+    size_t count_ones(size_t bits) const {
+        size_t count = 0;
+        size_t full_blocks = bits / 64;
+        for (size_t i = 0; i < full_blocks; ++i) {
+            count += std::popcount(window[i]);
+        }
+
+        size_t remaining_bits = bits % 64;
+        if (remaining_bits > 0) {
+            count += std::popcount(window[full_blocks] & low_bits_mask(remaining_bits));
+        }
+        return count;
+    }
+
+    void clear_unused_bits() { clear_bits_from(max_size); }
+
+    void clear_bits_from(size_t first_unused_bit) {
+        if (window.empty())
+            return;
+
+        size_t block_index = first_unused_bit / 64;
+        size_t bit_offset = first_unused_bit % 64;
+        if (block_index >= window.size())
+            return;
+
+        if (bit_offset == 0) {
+            std::fill(window.begin() + block_index, window.end(), 0);
+        } else {
+            window[block_index] &= low_bits_mask(bit_offset);
+            std::fill(window.begin() + block_index + 1, window.end(), 0);
+        }
+    }
+
+    std::vector<uint64_t> window;
     size_t max_size;
     size_t current_size;
 };
