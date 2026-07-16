@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(vad_project LANGUAGES CXX)
+
+find_package(Threads REQUIRED)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
