@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vad/vad-model.h"
+#include <cstdint>
 #include <vector>
 
 namespace VadFilterOnnx {
@@ -23,7 +24,7 @@ class FsmnVadModel : public VadModel {
   private:
     VadType type_ = VadType::FsmnVad;
     void process_logits(const std::vector<float> &logits);
-    std::vector<float> forward_frames(float *data, int n, int64_t first_p, int64_t last_p);
+    std::vector<float> forward_frames(float *data, int n, int32_t first_p, int32_t last_p);
     std::vector<Ort::Value> caches_;
     static constexpr std::array<int64_t, 4> cache_shape_{ 1, 128, 19, 1 };
     bool is_first_inference_ = true;

@@ -24,6 +24,12 @@ def get_args():
         "--sample-rate", type=int, default=8000, help="Sample rate (8000 or 16000)"
     )
     parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="public/models",
+        help="Directory to write exported ONNX models",
+    )
+    parser.add_argument(
         "--quantize", type=int, default=1, help="Export quantized int8 model"
     )
     return parser.parse_args()
@@ -59,16 +65,20 @@ class StreamingFbankLFR(nn.Module):
         Returns:
             feats: (B, T_padded, 80)
         """
-        assert first_padding.dtype == torch.int64 and last_padding.dtype == torch.int64
+        assert first_padding.dtype == torch.int32 and last_padding.dtype == torch.int32
         waveforms = waveforms * (1 << 15)
         feats = self.fbank(waveforms)
+        # Keep padding tensors on the graph so runtime can change them.
+        # Cast to int64 only for F.pad compatibility; ONNX inputs stay int32.
+        first_pad = first_padding.to(torch.int64)
+        last_pad = last_padding.to(torch.int64)
         feats = torch.nn.functional.pad(
             feats,
             (
                 0,
                 0,
-                first_padding,
-                last_padding,
+                first_pad,
+                last_pad,
             ),
             mode="replicate",
         )
@@ -210,8 +220,8 @@ def create_dummy_inputs(encoder_conf):
     in_cache1 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
     in_cache2 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
     in_cache3 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
-    first_padding = torch.tensor(0, dtype=torch.int64)
-    last_padding = torch.tensor(0, dtype=torch.int64)
+    first_padding = torch.tensor(0, dtype=torch.int32)
+    last_padding = torch.tensor(0, dtype=torch.int32)
 
     return (
         waveforms,
@@ -223,6 +233,27 @@ def create_dummy_inputs(encoder_conf):
         last_padding,
     )
 
+
+def assert_padding_inputs_int32(onnx_path):
+    """Ensure first_padding/last_padding graph inputs are int32."""
+    model = onnx.load(onnx_path)
+    expected = {
+        "first_padding": onnx.TensorProto.INT32,
+        "last_padding": onnx.TensorProto.INT32,
+    }
+    found = {}
+    for value_info in model.graph.input:
+        if value_info.name in expected:
+            found[value_info.name] = value_info.type.tensor_type.elem_type
+    missing = sorted(set(expected) - set(found))
+    if missing:
+        raise RuntimeError(f"{onnx_path}: missing padding inputs: {missing}")
+    for name, elem_type in expected.items():
+        if found[name] != elem_type:
+            raise RuntimeError(
+                f"{onnx_path}: {name} elem_type={found[name]}, expected INT32({elem_type})"
+            )
+    print(f"Verified int32 padding inputs in: {onnx_path}")
 
 def add_metadata_to_onnx(onnx_path, metadata_dict):
     """给ONNX模型添加自定义metadata"""
@@ -296,6 +327,8 @@ def quantize_onnx_model(input_path, output_path):
 
 def export_onnx(model_dir, output_path, sample_rate=8000, quantize=False):
     """导出FsmnVadStreaming模型为ONNX格式"""
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+
     # 加载模型
     model = AutoModel(model=model_dir, device="cpu", disable_update=True)
     cmvn: torch.Tensor = model.kwargs["frontend"].cmvn.to("cpu")
@@ -354,13 +387,19 @@ def export_onnx(model_dir, output_path, sample_rate=8000, quantize=False):
         "sample_rate": sample_rate,
     }
     add_metadata_to_onnx(output_path, metadata)
+    assert_padding_inputs_int32(output_path)
 
     # 量化模型
     if quantize:
         quantized_path = output_path.replace(".onnx", ".int8.onnx")
+        if quantized_path == output_path:
+            raise ValueError(
+                f"ONNX path must end with .onnx for int8 output: {output_path}"
+            )
         quantize_onnx_model(output_path, quantized_path)
         # 同样给量化模型添加metadata
         add_metadata_to_onnx(quantized_path, metadata)
+        assert_padding_inputs_int32(quantized_path)
 
 
 if __name__ == "__main__":
@@ -374,5 +413,7 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Invalid sample rate: {args.sample_rate}")
 
-    onnx_path = os.path.join(args.model_dir, onnx_filename)
-    export_onnx(args.model_dir, onnx_path, args.sample_rate, args.quantize)
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    onnx_path = os.path.join(output_dir, onnx_filename)
+    export_onnx(args.model_dir, onnx_path, args.sample_rate, bool(args.quantize))

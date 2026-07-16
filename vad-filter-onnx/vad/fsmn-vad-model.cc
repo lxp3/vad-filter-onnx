@@ -47,8 +47,8 @@ void FsmnVadModel::init_state() {
     }
 }
 
-std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t first_p,
-                                                int64_t last_p) {
+std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int32_t first_p,
+                                                int32_t last_p) {
     auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
     std::array<int64_t, 2> speech_shape = { 1, n };
     Ort::Value speech =
@@ -57,9 +57,9 @@ std::vector<float> FsmnVadModel::forward_frames(float *data, int n, int64_t firs
     std::array<int64_t, 1> p_shape = { 1 };
     // Padding parameters are passed as 0-dimensional tensors (scalars)
     Ort::Value first_padding =
-        Ort::Value::CreateTensor<int64_t>(memory_info, &first_p, 1, p_shape.data(), 0);
+        Ort::Value::CreateTensor<int32_t>(memory_info, &first_p, 1, p_shape.data(), 0);
     Ort::Value last_padding =
-        Ort::Value::CreateTensor<int64_t>(memory_info, &last_p, 1, p_shape.data(), 0);
+        Ort::Value::CreateTensor<int32_t>(memory_info, &last_p, 1, p_shape.data(), 0);
 
     std::vector<Ort::Value> inputs;
     inputs.push_back(std::move(speech));
@@ -167,8 +167,8 @@ std::vector<VadSegment> FsmnVadModel::decode(float *data, int n, bool input_fini
             return result;
         }
 
-        int64_t first_p = 2;
-        int64_t last_p = input_finished ? 2 : 0;
+        int32_t first_p = 2;
+        int32_t last_p = input_finished ? 2 : 0;
         auto logits =
             forward_frames(reminder_.data(), aligned_samples, first_p, last_p);
         is_first_inference_ = false;
