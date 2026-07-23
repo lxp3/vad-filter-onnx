@@ -29,10 +29,11 @@ std::unique_ptr<VadModel> FireredVadModel::init(const VadConfig &config) {
 
 void FireredVadModel::init_state() {
     reminder_.clear();
+    reminder_offset_ = 0;
 
     if (caches_ == nullptr) {
-        caches_ = Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(),
-                                                  cache_shape_.size());
+        caches_ =
+            Ort::Value::CreateTensor<float>(allocator_, cache_shape_.data(), cache_shape_.size());
     }
     Fill<float>(&caches_, 0.0f);
 }
@@ -78,30 +79,56 @@ void FireredVadModel::process_probs(const std::vector<float> &probs) {
 
 std::vector<VadSegment> FireredVadModel::decode(float *data, int n, bool input_finished) {
     received_samples_ += n;
-    if (n > 0) {
-        reminder_.insert(reminder_.end(), data, data + n);
-    }
 
-    if (reminder_.size() >= static_cast<size_t>(frame_length_)) {
-        int available = static_cast<int>(reminder_.size());
-        int num_frames = (available - frame_length_) / frame_shift_ + 1;
+    constexpr int kMaxFramesPerInference = 10;
+    const size_t max_inference_samples =
+        static_cast<size_t>(kMaxFramesPerInference - 1) * frame_shift_ + frame_length_;
+    size_t input_offset = 0;
+
+    while (input_offset < static_cast<size_t>(n) ||
+           (input_finished && reminder_.size() > reminder_offset_)) {
+        if (reminder_offset_ > 0 && (reminder_offset_ >= max_inference_samples ||
+                                     reminder_offset_ * 2 >= reminder_.size())) {
+            reminder_.erase(reminder_.begin(), reminder_.begin() + reminder_offset_);
+            reminder_offset_ = 0;
+        }
+
+        size_t available = reminder_.size() - reminder_offset_;
+        size_t room = max_inference_samples - std::min(available, max_inference_samples);
+        size_t append_count = std::min(room, static_cast<size_t>(n) - input_offset);
+        if (append_count > 0) {
+            reminder_.insert(reminder_.end(), data + input_offset,
+                             data + input_offset + append_count);
+        }
+        input_offset += append_count;
+        available += append_count;
+
+        const bool all_input_buffered = input_offset == static_cast<size_t>(n);
+        const bool final_block = input_finished && all_input_buffered;
+        if (available < static_cast<size_t>(frame_length_)) {
+            break;
+        }
+        if (!final_block && available < max_inference_samples && all_input_buffered) {
+            break;
+        }
+
+        int num_frames = (static_cast<int>(available) - frame_length_) / frame_shift_ + 1;
         int num_samples = frame_length_ + (num_frames - 1) * frame_shift_;
-
-        auto probs = forward_frames(reminder_.data(), num_samples);
+        auto probs = forward_frames(reminder_.data() + reminder_offset_, num_samples);
         process_probs(probs);
 
-        if (!input_finished) {
-            int consume = static_cast<int>(probs.size()) * frame_shift_;
-            consume = std::min(consume, static_cast<int>(reminder_.size()));
-            reminder_.erase(reminder_.begin(), reminder_.begin() + consume);
+        if (final_block) {
+            reminder_.clear();
+            reminder_offset_ = 0;
+            break;
         }
-    } else if (!input_finished) {
-        return {};
+        reminder_offset_ += probs.size() * frame_shift_;
     }
 
     if (input_finished) {
         flush();
         reminder_.clear();
+        reminder_offset_ = 0;
     }
 
     std::vector<VadSegment> result = std::move(segs_);

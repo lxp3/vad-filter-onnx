@@ -244,15 +244,17 @@ class Filterbank(nn.Module):
         )  # [num_frames, 1]
         indices = frame_indices + start_indices  # [num_frames, win_length]
 
-        # Expand to batch dimension
-        indices = indices.unsqueeze(0).expand(
-            batch_size, -1, -1
-        )  # [B, num_frames, win_length]
-
-        # Extract frames using gather
-        frames = torch.gather(
-            waveforms.unsqueeze(1).expand(-1, num_frames, -1), 2, indices
-        )  # [B, num_frames, win_length]
+        # Gather from a flattened waveform. Expanding waveforms to
+        # [B, num_frames, num_samples] makes ONNX Runtime materialize a tensor
+        # whose size grows with both the frame and sample counts.
+        batch_offsets = (
+            torch.arange(batch_size, device=waveforms.device).view(-1, 1, 1)
+            * num_samples
+        )
+        flat_indices = indices.unsqueeze(0) + batch_offsets
+        frames = waveforms.reshape(-1)[flat_indices.reshape(-1)].reshape(
+            batch_size, num_frames, self.win_length
+        )
 
         return frames
 

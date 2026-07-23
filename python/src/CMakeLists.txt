@@ -6,16 +6,13 @@ pybind11_add_module(vad_filter_onnx_python binding.cc)
 # Link to the main library and system libs required by static ONNX Runtime.
 target_link_libraries(vad_filter_onnx_python PRIVATE
     vad_filter_onnx::vad_filter_onnx
-    Threads::Threads
-    ${CMAKE_DL_LIBS}
-    rt
 )
 
 # Include directories
 target_include_directories(vad_filter_onnx_python PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../vad
-    ${CMAKE_CURRENT_SOURCE_DIR}/../utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../vad-filter-onnx/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../vad-filter-onnx/vad
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../vad-filter-onnx/utils
 )
 
 # Set properties

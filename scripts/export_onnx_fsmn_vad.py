@@ -56,8 +56,7 @@ class StreamingFbankLFR(nn.Module):
     def compute_feats(
         self,
         waveforms: torch.Tensor,
-        first_padding: torch.Tensor,
-        last_padding: torch.Tensor,
+        padding: torch.Tensor,
     ):
         """
         Args:
@@ -65,20 +64,19 @@ class StreamingFbankLFR(nn.Module):
         Returns:
             feats: (B, T_padded, 80)
         """
-        assert first_padding.dtype == torch.int32 and last_padding.dtype == torch.int32
+        assert padding.dtype == torch.int32
         waveforms = waveforms * (1 << 15)
         feats = self.fbank(waveforms)
         # Keep padding tensors on the graph so runtime can change them.
         # Cast to int64 only for F.pad compatibility; ONNX inputs stay int32.
-        first_pad = first_padding.to(torch.int64)
-        last_pad = last_padding.to(torch.int64)
+        padding = padding.to(torch.int64)
         feats = torch.nn.functional.pad(
             feats,
             (
                 0,
                 0,
-                first_pad,
-                last_pad,
+                padding[0],
+                padding[1],
             ),
             mode="replicate",
         )
@@ -121,20 +119,16 @@ class StreamingFbankLFR(nn.Module):
     def forward(
         self,
         waveforms: torch.Tensor,
-        first_padding: torch.Tensor,
-        last_padding: torch.Tensor,
+        padding: torch.Tensor,
     ):
         """
         Args:
             waveforms (torch.Tensor): Input waveforms tensor (B, T).
-            first_padding (torch.Tensor): Number of frames to pad at start.
-            last_padding (torch.Tensor): Number of frames to pad at end.
+            padding (torch.Tensor): Number of frames to pad at (left, right).
         Returns:
             lfr_feats (torch.Tensor): Output LFR features tensor
         """
-        feats = self.compute_feats(
-            waveforms, first_padding=first_padding, last_padding=last_padding
-        )
+        feats = self.compute_feats(waveforms, padding=padding)
 
         lfr_feats = self.apply_lfr(feats)
         lfr_feats = self.apply_cmvn(lfr_feats)
@@ -163,20 +157,16 @@ class FsmnVadStreamingExport(nn.Module):
         in_cache1: torch.Tensor,
         in_cache2: torch.Tensor,
         in_cache3: torch.Tensor,
-        first_padding: torch.Tensor,
-        last_padding: torch.Tensor,
+        padding: torch.Tensor,
     ):
         """
         Args:
             waveforms (torch.Tensor): Input waveforms tensor (B, T)
             in_cache0, in_cache1, in_cache2, in_cache3: Input cache tensors
-            first_padding (torch.Tensor): Frames to pad at start
-            last_padding (torch.Tensor): Frames to pad at end
+            padding (torch.Tensor): Frames to pad at (left, right)
         """
         # LFR 特征提取
-        x = self.preprocess_module(
-            waveforms, first_padding=first_padding, last_padding=last_padding
-        )
+        x = self.preprocess_module(waveforms, padding=padding)
 
         # 线性层
         x = self.in_linear1(x)
@@ -220,8 +210,7 @@ def create_dummy_inputs(encoder_conf):
     in_cache1 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
     in_cache2 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
     in_cache3 = torch.randn(1, proj_dim, cache_frames, 1, dtype=torch.float32)
-    first_padding = torch.tensor(0, dtype=torch.int32)
-    last_padding = torch.tensor(0, dtype=torch.int32)
+    padding = torch.tensor([0, 0], dtype=torch.int32)
 
     return (
         waveforms,
@@ -229,31 +218,23 @@ def create_dummy_inputs(encoder_conf):
         in_cache1,
         in_cache2,
         in_cache3,
-        first_padding,
-        last_padding,
+        padding,
     )
 
 
 def assert_padding_inputs_int32(onnx_path):
-    """Ensure first_padding/last_padding graph inputs are int32."""
+    """Ensure the padding graph input is an int32 [left, right] tensor."""
     model = onnx.load(onnx_path)
-    expected = {
-        "first_padding": onnx.TensorProto.INT32,
-        "last_padding": onnx.TensorProto.INT32,
-    }
-    found = {}
-    for value_info in model.graph.input:
-        if value_info.name in expected:
-            found[value_info.name] = value_info.type.tensor_type.elem_type
-    missing = sorted(set(expected) - set(found))
-    if missing:
-        raise RuntimeError(f"{onnx_path}: missing padding inputs: {missing}")
-    for name, elem_type in expected.items():
-        if found[name] != elem_type:
-            raise RuntimeError(
-                f"{onnx_path}: {name} elem_type={found[name]}, expected INT32({elem_type})"
-            )
-    print(f"Verified int32 padding inputs in: {onnx_path}")
+    value_info = next((item for item in model.graph.input if item.name == "padding"), None)
+    if value_info is None:
+        raise RuntimeError(f"{onnx_path}: missing padding input")
+    tensor_type = value_info.type.tensor_type
+    if tensor_type.elem_type != onnx.TensorProto.INT32:
+        raise RuntimeError(f"{onnx_path}: padding input must be INT32")
+    dims = tensor_type.shape.dim
+    if len(dims) != 1 or not dims[0].HasField("dim_value") or dims[0].dim_value != 2:
+        raise RuntimeError(f"{onnx_path}: padding input must have shape [2]")
+    print(f"Verified int32 padding[2] input in: {onnx_path}")
 
 def add_metadata_to_onnx(onnx_path, metadata_dict):
     """给ONNX模型添加自定义metadata"""
@@ -263,10 +244,13 @@ def add_metadata_to_onnx(onnx_path, metadata_dict):
     model, check = simplify(model)
     assert check, "Simplified ONNX model could not be validated"
 
-    # 添加metadata
+    # Update existing metadata instead of adding duplicate keys after quantization.
+    metadata = {item.key: item for item in model.metadata_props}
     for key, value in metadata_dict.items():
-        meta = model.metadata_props.add()
-        meta.key = key
+        meta = metadata.get(key)
+        if meta is None:
+            meta = model.metadata_props.add()
+            meta.key = key
         meta.value = str(value)
 
     # 保存模型
@@ -359,8 +343,7 @@ def export_onnx(model_dir, output_path, sample_rate=8000, quantize=False):
             "in_cache1",
             "in_cache2",
             "in_cache3",
-            "first_padding",
-            "last_padding",
+            "padding",
         ],
         output_names=[
             "logits",

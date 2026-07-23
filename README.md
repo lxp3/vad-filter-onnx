@@ -1,16 +1,39 @@
 # 
 
-# Vad models 
+# Vad models
 
-- silero-vad v4.0 ~ v6.2 is supported. Download models from [github releases](https://github.com/snakers4/silero-vad/releases)
-- fsmn-vad and ten-vad could be found in public/ dir.
+The FireRedVAD exports were compared with the source PyTorch Stream-VAD model
+using one second of deterministic 16 kHz float audio (`torch.manual_seed(20260723)`)
+and zero-initialized caches. The FSMN-VAD exports used the corresponding 8 kHz
+or 16 kHz source PyTorch model, the same duration and seed, zero-initialized
+caches, and feature padding `[2, 2]`. The table reports the maximum absolute
+error over the probability/logits output and all output caches.
 
-| Model | feature | Frame Length | Frame Shift  |
-| :--- | :--- | :--- | :--- |
-| Silero-VAD v4 | STFT | 32ms | 32ms |
-| Silero-VAD v5.0 ~ v6.2 | STFT | 36ms | 32ms | 
-| Fsmn-VAD | Fbank | 25ms | 10ms |
-| Ten-Vad |  MelBank | 48ms | 48ms |
+RTF benchmarks use deterministic audio, 5 warmup runs, and 20 measured runs on
+an Intel Xeon Silver 4316 CPU. Online RTF uses 5 seconds of audio and 100 ms
+chunks; offline RTF is reported for both 5-second and 120-second inputs.
+
+```bash
+./build/test-rtf-online \
+  --model-path public/models/fsmn_vad.16k.onnx \
+  --chunk-ms 100 \
+  --num-warmups 5 \
+  --num-runs 20
+```
+
+| Model | Sample rate | Feature | Frame Length | Frame Shift | Logits max diff | Cache max diff | Online RTF (5s) | Offline RTF (5s) | Offline RTF (120s) | Model address |
+| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| FireRed-VAD float | 16000 | Fbank | 25ms | 10ms | 0.00000417 | 0.00030851 | 0.011287 | 0.011907 | 0.011891 | [`firered_vad.onnx`](public/models/firered_vad.onnx) |
+| FireRed-VAD int8 | 16000 | Fbank | 25ms | 10ms | 0.05357799 | 5.96644974 | 0.010993 | 0.011226 | 0.011194 | [`firered_vad.int8.onnx`](public/models/firered_vad.int8.onnx) |
+| FSMN-VAD 16k float | 16000 | Fbank | 25ms | 10ms | 0.00000522 | 0.00002837 | 0.005762 | 0.008597 | 0.008684 | [`fsmn_vad.16k.onnx`](public/models/fsmn_vad.16k.onnx) |
+| FSMN-VAD 16k int8 | 16000 | Fbank | 25ms | 10ms | 0.07808840 | 0.35685480 | 0.005494 | 0.008536 | 0.008140 | [`fsmn_vad.16k.int8.onnx`](public/models/fsmn_vad.16k.int8.onnx) |
+| FSMN-VAD 8k float | 8000 | Fbank | 25ms | 10ms | 0.00000000 | 0.00000127 | 0.004503 | 0.006307 | 0.006321 | [`fsmn_vad.8k.onnx`](public/models/fsmn_vad.8k.onnx) |
+| FSMN-VAD 8k int8 | 8000 | Fbank | 25ms | 10ms | 0.00000150 | 0.01216167 | 0.003612 | 0.005645 | 0.005662 | [`fsmn_vad.8k.int8.onnx`](public/models/fsmn_vad.8k.int8.onnx) |
+| Silero-VAD v4 | 16000 | STFT | 32ms | 32ms | - | - | 0.005879 | 0.005400 | 0.005450 | [`silero_vad.v4.onnx`](public/models/silero_vad.v4.onnx) |
+| Silero-VAD v5 | 16000 | STFT | 36ms | 32ms | - | - | 0.004727 | 0.004806 | 0.004792 | [`silero_vad.v5.onnx`](public/models/silero_vad.v5.onnx) |
+| Silero-VAD v6 | 16000 | STFT | 36ms | 32ms | - | - | 0.004745 | 0.004851 | 0.004693 | [`silero_vad.v6.onnx`](public/models/silero_vad.v6.onnx) |
+| Silero-VAD v6 opset 15 | 16000 | STFT | 36ms | 32ms | - | - | 0.004717 | 0.004659 | 0.004600 | [`silero_vad_16k_op15.v6.onnx`](public/models/silero_vad_16k_op15.v6.onnx) |
+| Ten-VAD | 16000 | MelBank | 48ms | 48ms | - | - | 0.006124 | 0.006074 | 0.006118 | [`ten_vad.onnx`](public/models/ten_vad.onnx) |
 
 ## C++ CMake integration
 

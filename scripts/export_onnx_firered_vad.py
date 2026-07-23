@@ -348,10 +348,15 @@ def export_onnx(model_dir, output_path, opset, skip_simplify, verify, quantize):
     try:
         from fireredvad.core.detect_model import DetectModel
     except ImportError as exc:
-        raise ImportError(
-            "Could not import fireredvad. Set PYTHONPATH to the FireRedVAD repo, "
-            "for example: PYTHONPATH=/appsvc/lxp/repos/FireRedVAD:${PYTHONPATH}"
-        ) from exc
+        try:
+            # FireRedVAD's package __init__ imports its native audio frontend,
+            # which is not needed because this exporter provides its own FBank.
+            from core.detect_model import DetectModel
+        except ImportError:
+            raise ImportError(
+                "Could not import FireRedVAD DetectModel. Set PYTHONPATH to either "
+                "the package root or its fireredvad directory."
+            ) from exc
 
     model_path = os.path.join(model_dir, "model.pth.tar")
     cmvn_path = os.path.join(model_dir, "cmvn.ark")

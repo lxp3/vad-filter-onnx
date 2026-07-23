@@ -55,6 +55,10 @@ include(onnxruntime)
 # Add subdirectories
 add_subdirectory(vad-filter-onnx)
 
+if(ENABLE_PYTHON)
+    add_subdirectory(python/src python)
+endif()
+
 if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
     # Binaries
     add_executable(
@@ -68,8 +72,18 @@ if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
         vad-filter-onnx/vad
     )
 
+    add_executable(test-rtf-online vad-filter-onnx/bin/test-rtf-online.cc)
+    target_link_libraries(test-rtf-online PRIVATE vad_filter_onnx)
+    target_include_directories(test-rtf-online PRIVATE vad-filter-onnx/include)
+
+    add_executable(test-rtf-offline vad-filter-onnx/bin/test-rtf-offline.cc)
+    target_link_libraries(test-rtf-offline PRIVATE vad_filter_onnx)
+    target_include_directories(test-rtf-offline PRIVATE vad-filter-onnx/include)
+
     # Installation
-    install(TARGETS test-vad-online-decode RUNTIME DESTINATION bin)
+    install(TARGETS test-vad-online-decode test-rtf-online test-rtf-offline
+        RUNTIME DESTINATION bin
+    )
 endif()
 
 # Install ONNX Runtime shared library
@@ -84,4 +98,6 @@ if(BUILD_SHARED_LIBS STREQUAL "ON")
         file(GLOB ORT_LIBS "${ONNXRUNTIME_ROOT_DIR}/lib/*.so*")
         install(FILES ${ORT_LIBS} DESTINATION lib)
     endif()
+else()
+    install(FILES "${ONNXRUNTIME_LIB}" DESTINATION lib)
 endif()

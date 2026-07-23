@@ -4,7 +4,7 @@
 stage=$1
 build_dir=${2:-build_shared}
 
-export PYTHONPATH=$(pwd)/${build_dir}/vad-filter-onnx/python:${PYTHONPATH}
+export PYTHONPATH=$(pwd)/${build_dir}/python:${PYTHONPATH}
 
 # mp3_path=public/TownTheme.mp3
 # wav_path=public/TownTheme.wav
@@ -36,14 +36,14 @@ if [ ${stage} -eq 0 ]; then
 fi
 
 if [ ${stage} -eq 1 ]; then
-    python3 tests/python/test-online-vad.py \
+    python3 python/tests/test-online-vad.py \
         --model-path ${onnx_path} \
         --audio-path ${audio_path} \
         --threshold 0.8
 fi
 
 if [ ${stage} -eq 2 ]; then
-    python3 tests/python/test-offline-vad.py \
+    python3 python/tests/test-offline-vad.py \
         --model-path ${onnx_path} \
         --audio-path ${audio_path} \
         --threshold 0.8 
@@ -61,7 +61,7 @@ savedir=wer/wavs
 if [ ${stage} -eq 3 ]; then
     mkdir -p ${werdir}
     rm -rf ${savedir} && mkdir -p ${savedir}
-    python tests/python/test-online-vad-threads.py \
+    python python/tests/test-online-vad-threads.py \
         --model-path ${onnx_path} \
         --wavscp ${wavscp} \
         --vadscp ${vadscp} \

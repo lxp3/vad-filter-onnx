@@ -26,6 +26,7 @@ class FireredVadModel : public VadModel {
 
     Ort::Value caches_{ nullptr };
     static constexpr std::array<int64_t, 4> cache_shape_{ 8, 1, 128, 19 };
+    size_t reminder_offset_ = 0;
 };
 
 } // namespace VadFilterOnnx

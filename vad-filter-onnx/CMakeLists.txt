@@ -52,7 +52,3 @@ install(DIRECTORY include/
     DESTINATION include
     FILES_MATCHING PATTERN "*.h"
 )
-
-if(ENABLE_PYTHON)
-    add_subdirectory(python)
-endif()

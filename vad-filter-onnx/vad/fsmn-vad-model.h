@@ -28,7 +28,7 @@ class FsmnVadModel : public VadModel {
     std::vector<Ort::Value> caches_;
     static constexpr std::array<int64_t, 4> cache_shape_{ 1, 128, 19, 1 };
     bool is_first_inference_ = true;
-
+    size_t reminder_offset_ = 0;
 };
 
 } // namespace VadFilterOnnx

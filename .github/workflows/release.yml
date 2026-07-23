@@ -13,12 +13,12 @@ permissions:
 ########################
 jobs:
   build-linux:
-    name: Linux (${{ matrix.gpu == 'ON' && 'GPU' || 'CPU' }}, ABI${{ matrix.abi }})
+    name: Linux (CPU, ${{ matrix.linkage }}, ABI${{ matrix.abi }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        gpu: [OFF, ON]
+        linkage: [shared, static]
         abi: [0, 1]
 
     container: quay.io/pypa/manylinux_2_28_x86_64
@@ -30,7 +30,8 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_GPU=${{ matrix.gpu }} \
+            -DBUILD_SHARED_LIBS=${{ matrix.linkage == 'shared' && 'ON' || 'OFF' }} \
+            -DENABLE_GPU=OFF \
             -DGLIBCXX_USE_CXX11_ABI=${{ matrix.abi }}
 
       - name: Build
@@ -41,15 +42,14 @@ jobs:
 
       - name: Package
         run: |
-          gpu_tag=${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
-          pkg="vad-filter-onnx-${{ github.ref_name }}-linux-$gpu_tag-abi${{ matrix.abi }}-x64"
+          pkg="vad-filter-onnx-${{ github.ref_name }}-linux-cpu-${{ matrix.linkage }}-abi${{ matrix.abi }}-x64"
           mv install/vad-filter-onnx install/$pkg
           tar -czvf $pkg.tar.gz -C install $pkg
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}-abi${{ matrix.abi }}
+          name: linux-cpu-${{ matrix.linkage }}-abi${{ matrix.abi }}
           path: vad-filter-onnx-${{ github.ref_name }}-linux-*.tar.gz
 
 
@@ -57,12 +57,8 @@ jobs:
 # Windows
 ########################
   build-windows:
-    name: Windows (${{ matrix.gpu == 'ON' && 'GPU' || 'CPU' }})
+    name: Windows (CPU, shared)
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        gpu: [OFF, ON]
 
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +67,8 @@ jobs:
         run: |
           cmake -B build -S . `
             -DCMAKE_BUILD_TYPE=Release `
-            -DENABLE_GPU=${{ matrix.gpu }}
+            -DBUILD_SHARED_LIBS=ON `
+            -DENABLE_GPU=OFF
 
       - name: Build
         run: cmake --build build --config Release -j 4
@@ -82,8 +79,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $gpu = if ("${{ matrix.gpu }}" -eq "ON") { "gpu" } else { "cpu" }
-          $pkg = "vad-filter-onnx-${{ github.ref_name }}-win-$gpu-x64"
+          $pkg = "vad-filter-onnx-${{ github.ref_name }}-win-cpu-shared-x64"
           mv install/vad-filter-onnx install/$pkg
           cd install
           7z a ../$pkg.zip $pkg/
@@ -91,7 +87,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ matrix.gpu == 'ON' && 'gpu' || 'cpu' }}
+          name: windows-cpu-shared
           path: vad-filter-onnx-${{ github.ref_name }}-win-*.zip
 
 
@@ -109,6 +105,7 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
             -DENABLE_GPU=OFF \
             -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
 
