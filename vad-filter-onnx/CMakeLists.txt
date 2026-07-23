@@ -5,11 +5,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Source files
 file(GLOB_RECURSE SOURCES 
+    "denoise/*.cc"
     "utils/*.cc"
     "vad/*.cc"
     "include/*.cc"
 )
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-sliding-window-bit.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-gtcrn-denoise.cc")
 
 
 # Library
@@ -38,6 +40,9 @@ if(VAD_FILTER_ONNX_BUILD_TESTS)
     # Test
     add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
     target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx)
+
+    add_executable(test-gtcrn-denoise denoise/test-gtcrn-denoise.cc)
+    target_link_libraries(test-gtcrn-denoise PRIVATE vad_filter_onnx)
 endif()
 
 # Installation

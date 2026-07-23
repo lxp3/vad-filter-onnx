@@ -35,6 +35,47 @@ chunks; offline RTF is reported for both 5-second and 120-second inputs.
 | Silero-VAD v6 opset 15 | 16000 | STFT | 36ms | 32ms | - | - | 0.004717 | 0.004659 | 0.004600 | [`silero_vad_16k_op15.v6.onnx`](public/models/silero_vad_16k_op15.v6.onnx) |
 | Ten-VAD | 16000 | MelBank | 48ms | 48ms | - | - | 0.006124 | 0.006074 | 0.006118 | [`ten_vad.onnx`](public/models/ten_vad.onnx) |
 
+## GTCRN streaming denoise
+
+[`gtcrn.onnx`](public/models/gtcrn.onnx) uses the upstream
+[GTCRN](https://github.com/Xiaobin-Rong/gtcrn) DNS3 checkpoint. The ONNX graph
+accepts and returns normalized mono float waveform samples directly. Its
+512-point STFT, inverse STFT, periodic `sqrt(Hann)` window, and overlap-add are
+implemented with standard Torch/ONNX tensor operations.
+
+- Sample rate: 16 kHz only
+- ONNX input/output hop: 256 samples (16 ms)
+- C++ input chunks: arbitrary size
+- Stream output: delayed by one hop internally and flushed to the exact input
+  length when `input_finished=true`
+
+The exporter compares 20 consecutive streaming frames using deterministic
+audio (`torch.manual_seed(20260723)`). The upstream `mix.wav` was also checked
+over all 611 frames.
+
+| Input | Enhanced waveform max abs diff | All caches max abs diff |
+| :--- | ---: | ---: |
+| Deterministic audio, 20 frames | 0.00000019650906 | 0.000015258789 |
+| Upstream `mix.wav`, 611 frames | 0.00000062584877 | 0.000061064959 |
+
+```bash
+python scripts/export_onnx_gtcrn.py \
+  --source-dir debug/gtcrn \
+  --checkpoint debug/gtcrn/checkpoints/model_trained_on_dns3.tar \
+  --output public/models/gtcrn.onnx
+```
+
+```cpp
+#include <denoise-filter-onnx-cxx-api.h>
+
+auto handle = VadFilterOnnx::AutoDenoiseModel::create(
+    "public/models/gtcrn.onnx");
+auto denoise = handle->init(VadFilterOnnx::DenoiseConfig{});
+
+std::vector<float> enhanced = denoise->decode(
+    samples.data(), static_cast<int>(samples.size()), true);
+```
+
 ## C++ CMake integration
 
 The recommended way to use this project from another C++ CMake project is
