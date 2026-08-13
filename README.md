@@ -27,6 +27,18 @@ RTF benchmarks use deterministic audio, 5 warmup runs, and 20 measured runs on
 an Intel Xeon Silver 4316 CPU. Online RTF uses 5 seconds of audio and 100 ms
 chunks; offline RTF is reported for both 5-second and 120-second inputs.
 
+TEN-VAD has no PyTorch checkpoint upstream (it ships a TensorFlow-exported
+ONNX graph plus C/C++ feature extraction), so `ten_vad.onnx` is compared
+against that upstream graph driven with the same features rather than against
+a source PyTorch model; the int8 row is compared against the float export.
+Its 41st input feature is a pitch (F0) estimate, which is a stateful
+LPC/Viterbi algorithm and so cannot be traced into the graph — it is a graph
+input fed by `vad-filter-onnx/utils/pitch-estimator.{h,cc}`, while the 40
+log-mel features are computed inside the graph. Note the mel filterbank must
+match upstream's unnormalized HTK integer-bin triangles: substituting a
+librosa Slaney filterbank drops frame accuracy from 0.9001 to 0.8491 on the
+30 labeled files in TEN-VAD's own `testset/`.
+
 NeMo-MarbleNet-v2.0 has no recurrent cache/state (a non-causal conv stack with
 a receptive field wider than one output frame), so it has no cache max diff
 column. Its C++ streaming implementation approximates real-time inference by
@@ -74,7 +86,8 @@ FireRedVAD models.
 <tr><td><a href="public/models/silero_vad.v5.onnx"><code>silero_vad.v5.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004727</td><td align="right">0.004806</td><td align="right">0.004792</td></tr>
 <tr><td><a href="public/models/silero_vad.v6.onnx"><code>silero_vad.v6.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004745</td><td align="right">0.004851</td><td align="right">0.004693</td></tr>
 <tr><td><a href="public/models/silero_vad_16k_op15.v6.onnx"><code>silero_vad_16k_op15.v6.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004717</td><td align="right">0.004659</td><td align="right">0.004600</td></tr>
-<tr><td><a href="public/models/ten_vad.onnx"><code>ten_vad.onnx</code></a></td><td>MelBank</td><td align="right">16000</td><td align="right">48ms</td><td align="right">48ms</td><td align="right">-</td><td align="right">-</td><td align="right">0.006124</td><td align="right">0.006074</td><td align="right">0.006118</td></tr>
+<tr><td><a href="public/models/ten_vad.onnx"><code>ten_vad.onnx</code></a></td><td rowspan="2" valign="middle">MelBank<br>+ pitch</td><td align="right">16000</td><td align="right">48ms</td><td align="right">16ms</td><td align="right">0.00000012</td><td align="right">0.00000083</td><td align="right">0.010696</td><td align="right">0.010725</td><td align="right">0.011800</td></tr>
+<tr><td><a href="public/models/ten_vad.int8.onnx"><code>ten_vad.int8.onnx</code></a></td><td align="right">16000</td><td align="right">48ms</td><td align="right">16ms</td><td align="right">0.01035109</td><td align="right">0.15491605</td><td align="right">0.011312</td><td align="right">0.011323</td><td align="right">0.012643</td></tr>
 <tr><td><a href="public/models/nemo_marblenet_v2.onnx"><code>nemo_marblenet_v2.onnx</code></a></td><td rowspan="2" valign="middle">Mel</td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000016</td><td align="right">no cache</td><td align="right">0.007780</td><td align="right">0.001238</td><td align="right">0.001601</td></tr>
 <tr><td><a href="public/models/nemo_marblenet_v2.int8.onnx"><code>nemo_marblenet_v2.int8.onnx</code></a></td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.02430001</td><td align="right">no cache</td><td align="right">0.007837</td><td align="right">0.001233</td><td align="right">0.001593</td></tr>
 </tbody>
