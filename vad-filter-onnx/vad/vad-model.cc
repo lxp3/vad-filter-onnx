@@ -2,6 +2,7 @@
 #include "utils/onnx-common.h"
 #include "vad/firered-vad-model.h"
 #include "vad/fsmn-vad-model.h"
+#include "vad/nemo-marblenet-vad-model.h"
 #include "vad/silero-vad-model.h"
 #include "vad/ten-vad-model.h"
 #include <iostream>
@@ -38,6 +39,10 @@ std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_thre
         model = std::make_unique<FireredVadModel>();
         model->type_ = VadType::FireRedVad;
         printf("Success to create FireRedVad model from %s\n", path.c_str());
+    } else if (is_nemo_marblenet_vad(input_names, output_names)) {
+        model = std::make_unique<NemoMarbleNetVadModel>();
+        model->type_ = VadType::NemoMarbleNetVad;
+        printf("Success to create NemoMarbleNetVad model from %s\n", path.c_str());
     } else {
         printf("ERROR: Unknown Vad model type in %s\n", path.c_str());
         return nullptr;

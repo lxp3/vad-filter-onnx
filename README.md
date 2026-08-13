@@ -13,6 +13,14 @@ RTF benchmarks use deterministic audio, 5 warmup runs, and 20 measured runs on
 an Intel Xeon Silver 4316 CPU. Online RTF uses 5 seconds of audio and 100 ms
 chunks; offline RTF is reported for both 5-second and 120-second inputs.
 
+NeMo-MarbleNet-v2.0 has no recurrent cache/state (a non-causal conv stack with
+a receptive field wider than one output frame), so it has no cache max diff
+column. Its C++ streaming implementation approximates real-time inference by
+repeatedly running the whole model over a sliding window with left/right
+context and keeping only the middle frames, matching NeMo's own real-time
+demo approach; this adds a fixed extra latency versus the cached FSMN-VAD/
+FireRedVAD models.
+
 ```bash
 ./build/test-rtf-online \
   --model-path public/models/fsmn_vad.16k.onnx \
@@ -21,21 +29,44 @@ chunks; offline RTF is reported for both 5-second and 120-second inputs.
   --num-runs 20
 ```
 
-| Model | Sample rate | Feature | Frame Length | Frame Shift | Logits max diff | Cache max diff | Online RTF (5s) | Offline RTF (5s) | Offline RTF (120s) | Model address |
-| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| FireRed-VAD float | 16000 | Fbank | 25ms | 10ms | 0.00000417 | 0.00030851 | 0.011287 | 0.011907 | 0.011891 | [`firered_vad.onnx`](public/models/firered_vad.onnx) |
-| FireRed-VAD int8 | 16000 | Fbank | 25ms | 10ms | 0.05357799 | 5.96644974 | 0.010993 | 0.011226 | 0.011194 | [`firered_vad.int8.onnx`](public/models/firered_vad.int8.onnx) |
-| FSMN-VAD 16k float | 16000 | Fbank | 25ms | 10ms | 0.00000522 | 0.00002837 | 0.005762 | 0.008597 | 0.008684 | [`fsmn_vad.16k.onnx`](public/models/fsmn_vad.16k.onnx) |
-| FSMN-VAD 16k int8 | 16000 | Fbank | 25ms | 10ms | 0.07808840 | 0.35685480 | 0.005494 | 0.008536 | 0.008140 | [`fsmn_vad.16k.int8.onnx`](public/models/fsmn_vad.16k.int8.onnx) |
-| FSMN-VAD 8k float | 8000 | Fbank | 25ms | 10ms | 0.00000000 | 0.00000127 | 0.004503 | 0.006307 | 0.006321 | [`fsmn_vad.8k.onnx`](public/models/fsmn_vad.8k.onnx) |
-| FSMN-VAD 8k int8 | 8000 | Fbank | 25ms | 10ms | 0.00000150 | 0.01216167 | 0.003612 | 0.005645 | 0.005662 | [`fsmn_vad.8k.int8.onnx`](public/models/fsmn_vad.8k.int8.onnx) |
-| Silero-VAD v4 | 16000 | STFT | 32ms | 32ms | - | - | 0.005879 | 0.005400 | 0.005450 | [`silero_vad.v4.onnx`](public/models/silero_vad.v4.onnx) |
-| Silero-VAD v5 | 16000 | STFT | 36ms | 32ms | - | - | 0.004727 | 0.004806 | 0.004792 | [`silero_vad.v5.onnx`](public/models/silero_vad.v5.onnx) |
-| Silero-VAD v6 | 16000 | STFT | 36ms | 32ms | - | - | 0.004745 | 0.004851 | 0.004693 | [`silero_vad.v6.onnx`](public/models/silero_vad.v6.onnx) |
-| Silero-VAD v6 opset 15 | 16000 | STFT | 36ms | 32ms | - | - | 0.004717 | 0.004659 | 0.004600 | [`silero_vad_16k_op15.v6.onnx`](public/models/silero_vad_16k_op15.v6.onnx) |
-| Ten-VAD | 16000 | MelBank | 48ms | 48ms | - | - | 0.006124 | 0.006074 | 0.006118 | [`ten_vad.onnx`](public/models/ten_vad.onnx) |
+<table>
+<thead>
+<tr>
+  <th rowspan="2">Model</th>
+  <th rowspan="2">Feature</th>
+  <th rowspan="2">Sample<br>rate</th>
+  <th colspan="2" align="center">Frame</th>
+  <th colspan="2" align="center">Max diff</th>
+  <th colspan="3" align="center">RTF</th>
+</tr>
+<tr>
+  <th>Length</th>
+  <th>Shift</th>
+  <th>Logits</th>
+  <th>Cache</th>
+  <th>Online<br>(5s)</th>
+  <th>Offline<br>(5s)</th>
+  <th>Offline<br>(120s)</th>
+</tr>
+</thead>
+<tbody>
+<tr><td><a href="public/models/firered_vad.onnx"><code>firered_vad.onnx</code></a></td><td rowspan="2" valign="middle">Fbank</td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000417</td><td align="right">0.00030851</td><td align="right">0.011287</td><td align="right">0.011907</td><td align="right">0.011891</td></tr>
+<tr><td><a href="public/models/firered_vad.int8.onnx"><code>firered_vad.int8.onnx</code></a></td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.05357799</td><td align="right">5.96644974</td><td align="right">0.010993</td><td align="right">0.011226</td><td align="right">0.011194</td></tr>
+<tr><td><a href="public/models/fsmn_vad.16k.onnx"><code>fsmn_vad.16k.onnx</code></a></td><td rowspan="2" valign="middle">Fbank</td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000522</td><td align="right">0.00002837</td><td align="right">0.005762</td><td align="right">0.008597</td><td align="right">0.008684</td></tr>
+<tr><td><a href="public/models/fsmn_vad.16k.int8.onnx"><code>fsmn_vad.16k.int8.onnx</code></a></td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.07808840</td><td align="right">0.35685480</td><td align="right">0.005494</td><td align="right">0.008536</td><td align="right">0.008140</td></tr>
+<tr><td><a href="public/models/fsmn_vad.8k.onnx"><code>fsmn_vad.8k.onnx</code></a></td><td rowspan="2" valign="middle">Fbank</td><td align="right">8000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000000</td><td align="right">0.00000127</td><td align="right">0.004503</td><td align="right">0.006307</td><td align="right">0.006321</td></tr>
+<tr><td><a href="public/models/fsmn_vad.8k.int8.onnx"><code>fsmn_vad.8k.int8.onnx</code></a></td><td align="right">8000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000150</td><td align="right">0.01216167</td><td align="right">0.003612</td><td align="right">0.005645</td><td align="right">0.005662</td></tr>
+<tr><td><a href="public/models/silero_vad.v4.onnx"><code>silero_vad.v4.onnx</code></a></td><td rowspan="4" valign="middle">STFT</td><td align="right">16000</td><td align="right">32ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.005879</td><td align="right">0.005400</td><td align="right">0.005450</td></tr>
+<tr><td><a href="public/models/silero_vad.v5.onnx"><code>silero_vad.v5.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004727</td><td align="right">0.004806</td><td align="right">0.004792</td></tr>
+<tr><td><a href="public/models/silero_vad.v6.onnx"><code>silero_vad.v6.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004745</td><td align="right">0.004851</td><td align="right">0.004693</td></tr>
+<tr><td><a href="public/models/silero_vad_16k_op15.v6.onnx"><code>silero_vad_16k_op15.v6.onnx</code></a></td><td align="right">16000</td><td align="right">36ms</td><td align="right">32ms</td><td align="right">0</td><td align="right">0</td><td align="right">0.004717</td><td align="right">0.004659</td><td align="right">0.004600</td></tr>
+<tr><td><a href="public/models/ten_vad.onnx"><code>ten_vad.onnx</code></a></td><td>MelBank</td><td align="right">16000</td><td align="right">48ms</td><td align="right">48ms</td><td align="right">-</td><td align="right">-</td><td align="right">0.006124</td><td align="right">0.006074</td><td align="right">0.006118</td></tr>
+<tr><td><a href="public/models/nemo_marblenet_v2.onnx"><code>nemo_marblenet_v2.onnx</code></a></td><td rowspan="2" valign="middle">Mel</td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.00000016</td><td align="right">no cache</td><td align="right">0.007780</td><td align="right">0.001238</td><td align="right">0.001601</td></tr>
+<tr><td><a href="public/models/nemo_marblenet_v2.int8.onnx"><code>nemo_marblenet_v2.int8.onnx</code></a></td><td align="right">16000</td><td align="right">25ms</td><td align="right">10ms</td><td align="right">0.02430001</td><td align="right">no cache</td><td align="right">0.007837</td><td align="right">0.001233</td><td align="right">0.001593</td></tr>
+</tbody>
+</table>
 
-## GTCRN streaming denoise
+## Denoise models
 
 [`gtcrn.onnx`](public/models/gtcrn.onnx) uses the upstream
 [GTCRN](https://github.com/Xiaobin-Rong/gtcrn) DNS3 checkpoint. The ONNX graph

@@ -143,6 +143,8 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
         .value("SileroVadV5", VadType::SileroVadV5)
         .value("FsmnVad", VadType::FsmnVad)
         .value("TenVad", VadType::TenVad)
+        .value("FireRedVad", VadType::FireRedVad)
+        .value("NemoMarbleNetVad", VadType::NemoMarbleNetVad)
         .value("None", VadType::None)
         .export_values();
 
