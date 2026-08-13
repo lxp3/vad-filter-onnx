@@ -1,4 +1,18 @@
-# 
+# vad-filter-onnx
+
+This project packages several VAD (and denoise) models behind one
+consistent C++/Python interface:
+
+- **Feature extraction baked into the ONNX graph.** Fbank/STFT/MelBank/Mel
+  frontends are traced into the model, so the exported ONNX graph takes
+  raw PCM waveform directly — no separate feature step to keep in sync.
+- **One bit-packed sliding window for speech/silence detection.**
+  `SlidingWindowBit` tracks recent frame decisions as bits and counts them
+  with `std::popcount`, shared by every backend's voice start/end logic.
+- **One 0~1 threshold, one config, for every backend.** Every model
+  outputs a 0~1 speech probability, so a single `VadConfig` works
+  unchanged across Silero, FSMN-VAD, TenVAD, FireRedVAD, and
+  NeMo-MarbleNet.
 
 # Vad models
 
