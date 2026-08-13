@@ -23,6 +23,10 @@ constexpr float kMaxPathWeight = 0.02f;
 constexpr float kPcmScale = 32768.0f;
 constexpr float kPreemph = 0.97f;
 
+// M_PI is not standard C++ and MSVC does not define it without
+// _USE_MATH_DEFINES, so carry our own.
+constexpr float kPi = 3.14159265358979323846f;
+
 // The band layout is expressed against an 80-point reference FFT and scaled to
 // the actual FFT size at runtime.
 constexpr int kAssumedFftForBands = 80;
@@ -68,14 +72,14 @@ PitchEstimator::PitchEstimator(int sample_rate, int hop_size)
     // 768-point periodic Hann, matching the model's analysis window.
     window_.resize(window_size_);
     for (int i = 0; i < window_size_; ++i) {
-        const float phase = 2.0f * static_cast<float>(M_PI) * i / window_size_;
+        const float phase = 2.0f * kPi * i / window_size_;
         window_[i] = 0.5f - 0.5f * std::cos(phase);
     }
 
     dct_table_.resize(kNumBands * kNumBands);
     for (int i = 0; i < kNumBands; ++i) {
         for (int j = 0; j < kNumBands; ++j) {
-            float v = std::cos((i + 0.5f) * j * static_cast<float>(M_PI) / kNumBands);
+            float v = std::cos((i + 0.5f) * j * kPi / kNumBands);
             if (j == 0) {
                 v *= std::sqrt(0.5f);
             }
@@ -162,7 +166,7 @@ void PitchEstimator::real_fft(std::vector<float> *buffer, int n, bool inverse) c
     }
 
     for (int len = 2; len <= n; len <<= 1) {
-        const float ang = 2.0f * static_cast<float>(M_PI) / len * (inverse ? 1.0f : -1.0f);
+        const float ang = 2.0f * kPi / len * (inverse ? 1.0f : -1.0f);
         const float wr = std::cos(ang);
         const float wi = std::sin(ang);
         for (int i = 0; i < n; i += len) {
