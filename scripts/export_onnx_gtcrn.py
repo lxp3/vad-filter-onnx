@@ -11,6 +11,7 @@ import onnx
 import onnxruntime as ort
 import torch
 import torch.nn as nn
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
 NFFT = 512
@@ -86,6 +87,12 @@ def parse_args():
     parser.add_argument("--output", default="public/models/gtcrn.onnx")
     parser.add_argument("--verify-frames", type=int, default=20)
     parser.add_argument("--no-verify", action="store_true")
+    parser.add_argument(
+        "--quantize",
+        type=int,
+        default=1,
+        help="Save dynamic int8 model next to ONNX using .onnx -> .int8.onnx.",
+    )
     return parser.parse_args()
 
 
@@ -174,7 +181,53 @@ def verify(model: nn.Module, output_path: str, num_frames: int):
         raise RuntimeError("PyTorch/ONNX maximum absolute difference exceeds 1e-4")
 
 
-def export(model: nn.Module, output_path: str):
+def quantize_onnx_model(input_path: str, output_path: str):
+    model = onnx.load(input_path)
+    nodes_to_exclude = []
+    preprocess_inits = []
+    preprocess_keywords = (
+        "analysis_real",
+        "analysis_imag",
+        "synthesis_real",
+        "synthesis_imag",
+        "window",
+    )
+
+    for init in model.graph.initializer:
+        if any(keyword in init.name.lower() for keyword in preprocess_keywords):
+            preprocess_inits.append(init.name)
+
+    for node in model.graph.node:
+        node_name = node.name.lower()
+        if any(inp in preprocess_inits for inp in node.input):
+            nodes_to_exclude.append(node.name)
+            continue
+        if any(keyword in node_name for keyword in preprocess_keywords):
+            nodes_to_exclude.append(node.name)
+            continue
+        if node.op_type == "Conv":
+            group = next((a.i for a in node.attribute if a.name == "group"), 1)
+            if group != 1:
+                # ONNX Runtime's CPU ConvInteger kernel does not support
+                # grouped/depthwise convolution, so quantizing these
+                # produces a model that fails to load at inference time.
+                nodes_to_exclude.append(node.name)
+
+    nodes_to_exclude = sorted(set(nodes_to_exclude))
+    print(f"Excluding {len(nodes_to_exclude)} nodes from int8 quantization")
+
+    quantize_dynamic(
+        model_input=input_path,
+        model_output=output_path,
+        weight_type=QuantType.QUInt8,
+        nodes_to_exclude=nodes_to_exclude,
+        per_channel=False,
+        reduce_range=False,
+    )
+    print(f"Quantized int8 model saved to: {output_path}")
+
+
+def export(model: nn.Module, output_path: str, quantize: bool):
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     dummy_inputs = initial_inputs()
@@ -204,13 +257,22 @@ def export(model: nn.Module, output_path: str):
     add_metadata(str(output))
     print(f"Exported GTCRN waveform model to: {output}")
 
+    if quantize:
+        quantized_path = str(output).replace(".onnx", ".int8.onnx")
+        if quantized_path == str(output):
+            raise ValueError(f"ONNX path must end with .onnx for int8 output: {output}")
+        quantize_onnx_model(str(output), quantized_path)
+        add_metadata(quantized_path)
+        size = os.path.getsize(quantized_path)
+        print(f"Int8 file size: {size:,} bytes ({size / 1024 / 1024:.2f} MB)")
+
 
 def main():
     args = parse_args()
     if args.verify_frames <= 0:
         raise ValueError("--verify-frames must be greater than zero")
     model = load_model(args.source_dir, args.checkpoint)
-    export(model, args.output)
+    export(model, args.output, quantize=bool(args.quantize))
     if not args.no_verify:
         verify(model, args.output, args.verify_frames)
 

@@ -12,6 +12,7 @@ file(GLOB_RECURSE SOURCES
 )
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-sliding-window-bit.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-gtcrn-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-dpdfnet-denoise.cc")
 
 
 # Library
@@ -43,6 +44,9 @@ if(VAD_FILTER_ONNX_BUILD_TESTS)
 
     add_executable(test-gtcrn-denoise denoise/test-gtcrn-denoise.cc)
     target_link_libraries(test-gtcrn-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-dpdfnet-denoise denoise/test-dpdfnet-denoise.cc)
+    target_link_libraries(test-dpdfnet-denoise PRIVATE vad_filter_onnx)
 endif()
 
 # Installation
