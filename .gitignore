@@ -18,3 +18,4 @@ test-vad.sh
 !CMakeLists.txt
 *.log
 *.wav
+public/
