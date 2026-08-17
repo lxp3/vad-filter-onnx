@@ -1,6 +1,12 @@
+#include "denoise/deepfilternet-denoise-model.h"
 #include "denoise/denoise-model.h"
+#include "denoise/dfsmn-ans-psm-48k-denoise-model.h"
 #include "denoise/dpdfnet-denoise-model.h"
+#include "denoise/frcrn-se-16k-denoise-model.h"
 #include "denoise/gtcrn-denoise-model.h"
+#include "denoise/mossformer2-se-48k-denoise-model.h"
+#include "denoise/mossformergan-se-16k-denoise-model.h"
+#include "denoise/resemble-enhance-denoiser-denoise-model.h"
 #include "utils/onnx-common.h"
 #include <array>
 #include <cstdlib>
@@ -87,6 +93,148 @@ bool HasDpdfnetMetadata(Ort::Session *session, int *sample_rate) {
     return *sample_rate > 0;
 }
 
+bool HasSingleWaveformIoInterface(Ort::Session *session) {
+    const auto speech_shape = session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+    const auto enhanced_shape =
+        session->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+    // The batch dim is declared symbolic (not a static 1) on the enhanced
+    // output because onnxsim's shape inference cannot prove it stays 1
+    // through the model's internal Squeeze/Unsqueeze ops, even though it
+    // always is at runtime (this backend never uses batch>1). Accept -1
+    // (dynamic) as well as a static 1 on both input and output.
+    if (speech_shape.size() != 2 || (speech_shape[0] != 1 && speech_shape[0] != -1)) {
+        return false;
+    }
+    if (enhanced_shape.size() != 2 || (enhanced_shape[0] != 1 && enhanced_shape[0] != -1)) {
+        return false;
+    }
+    return session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetElementType() ==
+               ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT &&
+           session->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetElementType() ==
+               ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+}
+
+bool HasFrcrnSe16kMetadata(Ort::Session *session, int *sample_rate) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "frcrn_se_16k_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    if (!rate_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    return *sample_rate > 0;
+}
+
+bool HasMossformerganSe16kMetadata(Ort::Session *session, int *sample_rate) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "mossformergan_se_16k_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    if (!rate_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    return *sample_rate > 0;
+}
+
+bool HasMossformer2Se48kMetadata(Ort::Session *session, int *sample_rate) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "mossformer2_se_48k_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    if (!rate_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    return *sample_rate > 0;
+}
+
+bool HasDeepfilternetMetadata(Ort::Session *session, int *sample_rate, std::size_t *state_size,
+                              std::size_t *hop_size, std::size_t *delay_hops) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type) {
+        return false;
+    }
+    const std::string_view type(model_type.get());
+    if (type != "deepfilternet_denoise" && type != "deepfilternet2_denoise" &&
+        type != "deepfilternet3_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    auto state_size_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("state_size", allocator);
+    auto frame_shift_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("frame_shift", allocator);
+    auto delay_hops_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("delay_hops", allocator);
+    if (!rate_str || !state_size_str || !frame_shift_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    *state_size = static_cast<std::size_t>(std::atoll(state_size_str.get()));
+    *hop_size = static_cast<std::size_t>(std::atoll(frame_shift_str.get()));
+    *delay_hops = delay_hops_str ? static_cast<std::size_t>(std::atoll(delay_hops_str.get())) : 1;
+    return *sample_rate > 0 && *state_size > 0 && *hop_size > 0;
+}
+
+bool HasDfsmnAnsPsm48kMetadata(Ort::Session *session, int *sample_rate, std::size_t *state_size,
+                               std::size_t *hop_size, std::size_t *delay_hops) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "dfsmn_ans_psm_48k_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    auto state_size_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("state_size", allocator);
+    auto frame_shift_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("frame_shift", allocator);
+    auto delay_hops_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("delay_hops", allocator);
+    if (!rate_str || !state_size_str || !frame_shift_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    *state_size = static_cast<std::size_t>(std::atoll(state_size_str.get()));
+    *hop_size = static_cast<std::size_t>(std::atoll(frame_shift_str.get()));
+    *delay_hops = delay_hops_str ? static_cast<std::size_t>(std::atoll(delay_hops_str.get())) : 1;
+    return *sample_rate > 0 && *state_size > 0 && *hop_size > 0;
+}
+
+bool HasResembleEnhanceDenoiserMetadata(Ort::Session *session, int *sample_rate) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "resemble_enhance_denoiser_denoise") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    if (!rate_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    return *sample_rate > 0;
+}
+
 } // namespace
 
 std::unique_ptr<DenoiseModel> DenoiseModel::create(const std::string &path, int num_threads,
@@ -115,6 +263,95 @@ std::unique_ptr<DenoiseModel> DenoiseModel::create(const std::string &path, int 
         model->set_state_size(state_size);
         model->set_hop_size(hop_size);
         model->set_sample_rate(sample_rate);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int frcrn_sample_rate = 0;
+    if (is_frcrn_se_16k_denoise(input_names, output_names) && HasSingleWaveformIoInterface(session.get()) &&
+        HasFrcrnSe16kMetadata(session.get(), &frcrn_sample_rate)) {
+        auto model = std::make_unique<FrcrnSe16kDenoiseModel>();
+        model->set_sample_rate(frcrn_sample_rate);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int mossformergan_sample_rate = 0;
+    if (is_mossformergan_se_16k_denoise(input_names, output_names) &&
+        HasSingleWaveformIoInterface(session.get()) &&
+        HasMossformerganSe16kMetadata(session.get(), &mossformergan_sample_rate)) {
+        auto model = std::make_unique<MossformerganSe16kDenoiseModel>();
+        model->set_sample_rate(mossformergan_sample_rate);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int mossformer2_sample_rate = 0;
+    if (is_mossformer2_se_48k_denoise(input_names, output_names) &&
+        HasSingleWaveformIoInterface(session.get()) &&
+        HasMossformer2Se48kMetadata(session.get(), &mossformer2_sample_rate)) {
+        auto model = std::make_unique<Mossformer2Se48kDenoiseModel>();
+        model->set_sample_rate(mossformer2_sample_rate);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int resemble_enhance_sample_rate = 0;
+    if (is_resemble_enhance_denoiser_denoise(input_names, output_names) &&
+        HasSingleWaveformIoInterface(session.get()) &&
+        HasResembleEnhanceDenoiserMetadata(session.get(), &resemble_enhance_sample_rate)) {
+        auto model = std::make_unique<ResembleEnhanceDenoiserDenoiseModel>();
+        model->set_sample_rate(resemble_enhance_sample_rate);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int dfsmn_ans_psm_48k_sample_rate = 0;
+    std::size_t dfsmn_ans_psm_48k_state_size = 0;
+    std::size_t dfsmn_ans_psm_48k_hop_size = 0;
+    std::size_t dfsmn_ans_psm_48k_delay_hops = 1;
+    if (is_dfsmn_ans_psm_48k_denoise(input_names, output_names) &&
+        HasExpectedDpdfnetInterface(session.get(), &dfsmn_ans_psm_48k_state_size,
+                                    &dfsmn_ans_psm_48k_hop_size) &&
+        HasDfsmnAnsPsm48kMetadata(session.get(), &dfsmn_ans_psm_48k_sample_rate,
+                                  &dfsmn_ans_psm_48k_state_size, &dfsmn_ans_psm_48k_hop_size,
+                                  &dfsmn_ans_psm_48k_delay_hops)) {
+        auto model = std::make_unique<DfsmnAnsPsm48kDenoiseModel>();
+        model->set_state_size(dfsmn_ans_psm_48k_state_size);
+        model->set_hop_size(dfsmn_ans_psm_48k_hop_size);
+        model->set_sample_rate(dfsmn_ans_psm_48k_sample_rate);
+        model->set_delay_hops(dfsmn_ans_psm_48k_delay_hops);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int deepfilternet_sample_rate = 0;
+    std::size_t deepfilternet_state_size = 0;
+    std::size_t deepfilternet_hop_size = 0;
+    std::size_t deepfilternet_delay_hops = 1;
+    if (is_deepfilternet_denoise(input_names, output_names) &&
+        HasExpectedDpdfnetInterface(session.get(), &deepfilternet_state_size,
+                                    &deepfilternet_hop_size) &&
+        HasDeepfilternetMetadata(session.get(), &deepfilternet_sample_rate,
+                                 &deepfilternet_state_size, &deepfilternet_hop_size,
+                                 &deepfilternet_delay_hops)) {
+        auto model = std::make_unique<DeepFilterNetDenoiseModel>();
+        model->set_state_size(deepfilternet_state_size);
+        model->set_hop_size(deepfilternet_hop_size);
+        model->set_sample_rate(deepfilternet_sample_rate);
+        model->set_delay_hops(deepfilternet_delay_hops);
         model->session_ = std::move(session);
         model->input_names_ = std::move(input_names);
         model->output_names_ = std::move(output_names);

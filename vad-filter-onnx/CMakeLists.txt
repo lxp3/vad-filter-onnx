@@ -13,6 +13,12 @@ file(GLOB_RECURSE SOURCES
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-sliding-window-bit.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-gtcrn-denoise.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-dpdfnet-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-frcrn-se-16k-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-mossformergan-se-16k-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-mossformer2-se-48k-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-resemble-enhance-denoiser-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-deepfilternet-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-dfsmn-ans-psm-48k-denoise.cc")
 
 
 # Library
@@ -47,6 +53,24 @@ if(VAD_FILTER_ONNX_BUILD_TESTS)
 
     add_executable(test-dpdfnet-denoise denoise/test-dpdfnet-denoise.cc)
     target_link_libraries(test-dpdfnet-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-frcrn-se-16k-denoise denoise/test-frcrn-se-16k-denoise.cc)
+    target_link_libraries(test-frcrn-se-16k-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-mossformergan-se-16k-denoise denoise/test-mossformergan-se-16k-denoise.cc)
+    target_link_libraries(test-mossformergan-se-16k-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-mossformer2-se-48k-denoise denoise/test-mossformer2-se-48k-denoise.cc)
+    target_link_libraries(test-mossformer2-se-48k-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-resemble-enhance-denoiser-denoise denoise/test-resemble-enhance-denoiser-denoise.cc)
+    target_link_libraries(test-resemble-enhance-denoiser-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-deepfilternet-denoise denoise/test-deepfilternet-denoise.cc)
+    target_link_libraries(test-deepfilternet-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-dfsmn-ans-psm-48k-denoise denoise/test-dfsmn-ans-psm-48k-denoise.cc)
+    target_link_libraries(test-dfsmn-ans-psm-48k-denoise PRIVATE vad_filter_onnx)
 endif()
 
 # Installation
