@@ -1,19 +1,22 @@
 # vad-filter-onnx
 
-## ONNX models
+## Introduction
 
-The ONNX model files are hosted in the [Hugging Face model repository](https://huggingface.co/1024plus1/vad-filter-onnx-models). Browse the [VAD models](https://huggingface.co/1024plus1/vad-filter-onnx-models/tree/main/vad) or [denoise models](https://huggingface.co/1024plus1/vad-filter-onnx-models/tree/main/denoise) online.
+This project provides a simple, efficient C++/Python interface for running
+audio ONNX models:
 
-This project packages several VAD (and denoise) models behind one
-consistent C++/Python interface:
+- **Simple and efficient inference.** Feature extraction is built into each
+  ONNX graph, so callers pass raw waveform samples without an extra Fbank,
+  STFT, or mel-processing pipeline.
+- **Low-latency streaming.** The API focuses on real-time use, with explicit
+  frame-wise state and low-latency streaming support where the model allows it.
+- **Broad model coverage.** The repository includes VAD, denoise, speech
+  enhancement, and speaker-diarization models, with more model families sharing
+  the same interface.
+- **Cross-platform.** The C++ implementation supports Linux, Windows, and
+  macOS.
 
-- **Free of feature extraction.** Feature extraction is baked into the ONNX graph. Fbank/STFT/MelBank/Mel
-  frontends are traced into the model, so the exported ONNX graph takes
-  raw PCM waveform directly — no separate feature step to keep in sync.
-- **One bit-packed sliding window for speech/silence detection.**
-  `SlidingWindowBit` tracks recent frame decisions as bits and counts them
-  with `std::popcount`, shared by every backend's voice start/end logic.
-- **Streaming support.**
+The ONNX files are hosted in the [Hugging Face model repository](https://huggingface.co/1024plus1/vad-filter-onnx-models). Browse the [VAD models](https://huggingface.co/1024plus1/vad-filter-onnx-models/tree/main/vad) or [denoise models](https://huggingface.co/1024plus1/vad-filter-onnx-models/tree/main/denoise).
 
 # VAD models
 
