@@ -11,6 +11,7 @@ import onnx
 import onnxruntime as ort
 import torch
 import torch.nn as nn
+from onnxconverter_common import float16
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
@@ -58,7 +59,7 @@ class StreamingWaveformGTCRN(nn.Module):
         enhanced_spectrum, conv_cache, tra_cache, inter_cache = self.model(
             spectrum, conv_cache, tra_cache, inter_cache
         )
-        enhanced_spectrum = enhanced_spectrum.squeeze(2)
+        enhanced_spectrum = enhanced_spectrum[:, :, 0, :]
         enhanced_frame = (
             torch.matmul(enhanced_spectrum[..., 0], self.synthesis_real)
             + torch.matmul(enhanced_spectrum[..., 1], self.synthesis_imag)
@@ -112,14 +113,14 @@ def load_model(source_dir: str, checkpoint: str):
     return StreamingWaveformGTCRN(stream_model).cpu().eval()
 
 
-def initial_inputs():
+def initial_inputs(batch_size: int = 1):
     return (
-        torch.zeros(1, HOP_SIZE, dtype=torch.float32),
-        torch.zeros(2, 1, 16, 16, 33, dtype=torch.float32),
-        torch.zeros(2, 3, 1, 1, 16, dtype=torch.float32),
-        torch.zeros(2, 1, 33, 16, dtype=torch.float32),
-        torch.zeros(1, HOP_SIZE, dtype=torch.float32),
-        torch.zeros(1, HOP_SIZE, dtype=torch.float32),
+        torch.zeros(batch_size, HOP_SIZE, dtype=torch.float32),
+        torch.zeros(2, batch_size, 16, 16, 33, dtype=torch.float32),
+        torch.zeros(2, 3, 1, batch_size, 16, dtype=torch.float32),
+        torch.zeros(2, 1, batch_size * 33, 16, dtype=torch.float32),
+        torch.zeros(batch_size, HOP_SIZE, dtype=torch.float32),
+        torch.zeros(batch_size, HOP_SIZE, dtype=torch.float32),
     )
 
 
@@ -144,9 +145,10 @@ def add_metadata(output_path: str):
 
 def verify(model: nn.Module, output_path: str, num_frames: int):
     torch.manual_seed(20260723)
-    waveform = torch.rand(1, num_frames * HOP_SIZE, dtype=torch.float32) * 2.0 - 1.0
-    torch_state = list(initial_inputs()[1:])
-    ort_state = [value.numpy().copy() for value in initial_inputs()[1:]]
+    batch_size = 2
+    waveform = torch.rand(batch_size, num_frames * HOP_SIZE, dtype=torch.float32) * 2.0 - 1.0
+    torch_state = list(initial_inputs(batch_size)[1:])
+    ort_state = [value.numpy().copy() for value in initial_inputs(batch_size)[1:]]
     session = ort.InferenceSession(output_path, providers=["CPUExecutionProvider"])
 
     waveform_diff = 0.0
@@ -227,6 +229,23 @@ def quantize_onnx_model(input_path: str, output_path: str):
     print(f"Quantized int8 model saved to: {output_path}")
 
 
+def convert_fp16_onnx_model(input_path: str, output_path: str):
+    model = onnx.load(input_path)
+    model = float16.convert_float_to_float16(model)
+    onnx.save(model, output_path)
+    add_metadata(output_path)
+    print(f"Float16 model saved to: {output_path}")
+
+
+def verify_fp16(output_path: str):
+    model = onnx.load(output_path)
+    onnx.checker.check_model(model)
+    graph_values = [*model.graph.input, *model.graph.output]
+    if any(value.type.tensor_type.elem_type != onnx.TensorProto.FLOAT16 for value in graph_values):
+        raise RuntimeError("Float16 ONNX model has non-float16 inputs or outputs")
+    print("Float16 ONNX input/output dtype verification passed")
+
+
 def export(model: nn.Module, output_path: str, quantize: bool):
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +270,24 @@ def export(model: nn.Module, output_path: str, quantize: bool):
             "analysis_cache_out",
             "synthesis_cache_out",
         ],
+        # The streaming frame length remains fixed at HOP_SIZE. Only the batch
+        # dimension is dynamic, and each cache must use the matching batch size.
+        # inter_cache flattens batch and the fixed 33 frequency bins into axis 2,
+        # so its dynamic dimension has size batch_size * 33.
+        dynamic_axes={
+            "speech": {0: "batch"},
+            "conv_cache": {1: "batch"},
+            "tra_cache": {3: "batch"},
+            "inter_cache": {2: "batch_frequency"},
+            "analysis_cache": {0: "batch"},
+            "synthesis_cache": {0: "batch"},
+            "enhanced": {0: "batch"},
+            "conv_cache_out": {1: "batch"},
+            "tra_cache_out": {3: "batch"},
+            "inter_cache_out": {2: "batch_frequency"},
+            "analysis_cache_out": {0: "batch"},
+            "synthesis_cache_out": {0: "batch"},
+        },
         opset_version=OPSET_VERSION,
         dynamo=False,
     )
@@ -265,6 +302,12 @@ def export(model: nn.Module, output_path: str, quantize: bool):
         add_metadata(quantized_path)
         size = os.path.getsize(quantized_path)
         print(f"Int8 file size: {size:,} bytes ({size / 1024 / 1024:.2f} MB)")
+
+    fp16_path = str(output).replace(".onnx", ".fp16.onnx")
+    if fp16_path == str(output):
+        raise ValueError(f"ONNX path must end with .onnx for FP16 output: {output}")
+    convert_fp16_onnx_model(str(output), fp16_path)
+    verify_fp16(fp16_path)
 
 
 def main():

@@ -24,6 +24,25 @@ bool HasExpectedTensor(Ort::Session *session, std::size_t index, bool input,
            tensor_info.GetShape() == expected_shape;
 }
 
+bool HasExpectedGtcrnTensor(Ort::Session *session, std::size_t index, bool input,
+                            const std::vector<int64_t> &expected_shape) {
+    const auto type_info =
+        input ? session->GetInputTypeInfo(index) : session->GetOutputTypeInfo(index);
+    const auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
+    const auto actual_shape = tensor_info.GetShape();
+    if (tensor_info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT ||
+        actual_shape.size() != expected_shape.size()) {
+        return false;
+    }
+    for (std::size_t dimension = 0; dimension < expected_shape.size(); ++dimension) {
+        if (actual_shape[dimension] != expected_shape[dimension] &&
+            actual_shape[dimension] != -1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool HasExpectedGtcrnInterface(Ort::Session *session) {
     const std::array<std::vector<int64_t>, 6> shapes = {
         std::vector<int64_t>{ 1, 256 },         std::vector<int64_t>{ 2, 1, 16, 16, 33 },
@@ -31,8 +50,8 @@ bool HasExpectedGtcrnInterface(Ort::Session *session) {
         std::vector<int64_t>{ 1, 256 },         std::vector<int64_t>{ 1, 256 },
     };
     for (std::size_t index = 0; index < shapes.size(); ++index) {
-        if (!HasExpectedTensor(session, index, true, shapes[index]) ||
-            !HasExpectedTensor(session, index, false, shapes[index])) {
+        if (!HasExpectedGtcrnTensor(session, index, true, shapes[index]) ||
+            !HasExpectedGtcrnTensor(session, index, false, shapes[index])) {
             return false;
         }
     }

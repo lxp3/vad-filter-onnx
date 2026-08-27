@@ -88,9 +88,13 @@ if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
     target_link_libraries(test-rtf-denoise-offline PRIVATE vad_filter_onnx)
     target_include_directories(test-rtf-denoise-offline PRIVATE vad-filter-onnx/include)
 
+    add_executable(test-denoise vad-filter-onnx/bin/test-denoise.cc vad-filter-onnx/bin/resample.cc)
+    target_link_libraries(test-denoise PRIVATE vad_filter_onnx)
+    target_include_directories(test-denoise PRIVATE vad-filter-onnx/include vad-filter-onnx/utils)
+
     # Installation
     install(TARGETS test-vad-online-decode test-rtf-online test-rtf-offline
-        test-rtf-denoise-online test-rtf-denoise-offline
+        test-rtf-denoise-online test-rtf-denoise-offline test-denoise
         RUNTIME DESTINATION bin
     )
 endif()
