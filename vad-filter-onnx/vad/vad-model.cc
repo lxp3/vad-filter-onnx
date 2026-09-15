@@ -3,6 +3,7 @@
 #include "vad/firered-vad-model.h"
 #include "vad/fsmn-vad-model.h"
 #include "vad/nemo-marblenet-vad-model.h"
+#include "vad/pulse-vad-model.h"
 #include "vad/silero-vad-model.h"
 #include "vad/ten-vad-model.h"
 #include <iostream>
@@ -19,7 +20,11 @@ std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_thre
 
     // Create a temporary resource holder to identify the model type
     std::unique_ptr<VadModel> model;
-    if (is_silero_vad_v4(input_names, output_names)) {
+    if (is_pulse_vad(session.get())) {
+        model = std::make_unique<PulseVadModel>();
+        model->type_ = VadType::PulseVad;
+        printf("Success to create PulseVad model from %s\n", path.c_str());
+    } else if (is_silero_vad_v4(input_names, output_names)) {
         model = std::make_unique<SileroVadModelV4>();
         model->type_ = VadType::SileroVadV4;
         printf("Success to create SileroVadV4 model from %s\n", path.c_str());

@@ -46,6 +46,10 @@ PCM -> LPC/Viterbi pitch (41st feature) -----+
 
 MarbleNet 是非因果卷积栈，没有 recurrent cache。C++ 流式封装以滑动窗口重复运行整段网络，并保留中间帧，因此延迟高于 FSMN/FireRed 的显式缓存方案。
 
+## PulseVAD
+
+PulseVAD 把 64-bin log-mel 前端打进 ONNX，输入固定 200 ms（3200 点 @ 16 kHz）波形，输出一个语音概率，没有 recurrent cache。2.1k 与 81k teacher 共用同一套 C++ 滑窗，hop 100 ms。通过 metadata `model_type=pulsevad` 识别，避免和 MarbleNet 的 `speech`/`probs` 接口撞车。
+
 ## 验证方法
 
-FireRed/FSMN 使用固定随机种子、零初始化 cache 的 PyTorch 对照；TEN-VAD 对照上游 TensorFlow/ONNX 图；MarbleNet 对照对应的窗口推理结果。RTF 使用 Intel Xeon Silver 4316，5 次 warmup、20 次测量。
+FireRed/FSMN 使用固定随机种子、零初始化 cache 的 PyTorch 对照；TEN-VAD 对照上游 TensorFlow/ONNX 图；MarbleNet / PulseVAD 对照对应的窗口推理结果。RTF 使用 Intel Xeon Silver 4316，5 次 warmup、20 次测量。

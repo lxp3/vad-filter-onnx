@@ -10,6 +10,7 @@ enum class VadType {
     TenVad,
     FireRedVad,
     NemoMarbleNetVad,
+    PulseVad,
     None,
 };
 
