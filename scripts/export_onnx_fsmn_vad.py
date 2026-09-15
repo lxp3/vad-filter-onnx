@@ -197,6 +197,47 @@ class FsmnVadStreamingExport(nn.Module):
         )
 
 
+def load_encoder_checkpoint(encoder: nn.Module, model_dir: str) -> None:
+    ckpt_path = os.path.join(model_dir, "model.pt")
+    if not os.path.isfile(ckpt_path):
+        raise FileNotFoundError(f"encoder checkpoint not found: {ckpt_path}")
+
+    raw = torch.load(ckpt_path, map_location="cpu")
+    if isinstance(raw, dict):
+        for key in ("state_dict", "model_state_dict", "model"):
+            nested = raw.get(key)
+            if isinstance(nested, dict) and any(torch.is_tensor(v) for v in nested.values()):
+                raw = nested
+                break
+
+    src = {k: v for k, v in raw.items() if torch.is_tensor(v)}
+    dst = encoder.state_dict()
+    mapped = {}
+    missing = []
+    for name, tensor in dst.items():
+        if name in src:
+            value = src[name]
+        elif f"encoder.{name}" in src:
+            value = src[f"encoder.{name}"]
+        elif name.startswith("encoder.") and name[len("encoder.") :] in src:
+            value = src[name[len("encoder.") :]]
+        else:
+            missing.append(name)
+            continue
+        if tuple(value.shape) != tuple(tensor.shape):
+            raise RuntimeError(
+                f"{ckpt_path}: shape mismatch for {name}: "
+                f"ckpt {tuple(value.shape)} vs model {tuple(tensor.shape)}"
+            )
+        mapped[name] = value
+
+    if missing:
+        raise RuntimeError(f"{ckpt_path}: missing encoder keys: {missing}")
+
+    encoder.load_state_dict(mapped, strict=True)
+    print(f"Loaded {len(mapped)} encoder tensors from {ckpt_path}")
+
+
 def create_dummy_inputs(encoder_conf):
     """创建用于ONNX导出的dummy inputs"""
     num_samples = 1 * 16000
@@ -241,7 +282,7 @@ def add_metadata_to_onnx(onnx_path, metadata_dict):
     model = onnx.load(onnx_path)
 
     # simplify model
-    model, check = simplify(model)
+    model, check = simplify(model, dynamic_input_shape=True)
     assert check, "Simplified ONNX model could not be validated"
 
     # Update existing metadata instead of adding duplicate keys after quantization.
@@ -314,10 +355,18 @@ def export_onnx(model_dir, output_path, sample_rate=8000, quantize=False):
     os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
 
     # 加载模型
-    model = AutoModel(model=model_dir, device="cpu", disable_update=True)
+    model = AutoModel(
+        model=model_dir,
+        device="cpu",
+        disable_update=True,
+        scope_map=["None", "encoder."],
+    )
     cmvn: torch.Tensor = model.kwargs["frontend"].cmvn.to("cpu")
     encoder_conf = model.model.encoder_conf
     print(f"encoder_conf: {encoder_conf}")
+
+    # 8k ckpt keys omit the "encoder." prefix that FunASR's module uses.
+    load_encoder_checkpoint(model.model.encoder, model_dir)
 
     # 创建导出模型
     print(model.model.encoder)
@@ -353,8 +402,16 @@ def export_onnx(model_dir, output_path, sample_rate=8000, quantize=False):
             "out_cache3",
         ],
         dynamic_axes={
-            "speech": {1: "num_samples"},
-            "logits": {1: "num_frames"},
+            "speech": {0: "batch", 1: "num_samples"},
+            "in_cache0": {0: "batch"},
+            "in_cache1": {0: "batch"},
+            "in_cache2": {0: "batch"},
+            "in_cache3": {0: "batch"},
+            "logits": {0: "batch", 1: "num_frames"},
+            "out_cache0": {0: "batch"},
+            "out_cache1": {0: "batch"},
+            "out_cache2": {0: "batch"},
+            "out_cache3": {0: "batch"},
         },
         opset_version=opset_version,
         verbose=False,

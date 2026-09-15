@@ -154,7 +154,7 @@ def add_metadata_to_onnx(onnx_path, metadata_dict):
 
 def simplify_onnx(onnx_path):
     model = onnx.load(onnx_path)
-    model, check = simplify(model)
+    model, check = simplify(model, dynamic_input_shape=True)
     assert check, "Simplified ONNX model could not be validated"
     onnx.save(model, onnx_path)
     print("Simplified with onnxsim")
@@ -320,8 +320,8 @@ def export_onnx(model_dir, output_path, opset, skip_simplify, verify, quantize):
         input_names=["speech"],
         output_names=["enhanced"],
         dynamic_axes={
-            "speech": {1: "num_samples"},
-            "enhanced": {1: "num_samples"},
+            "speech": {0: "batch", 1: "num_samples"},
+            "enhanced": {0: "batch", 1: "num_samples"},
         },
         opset_version=opset,
         verbose=False,

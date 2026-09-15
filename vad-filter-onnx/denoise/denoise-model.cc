@@ -1,5 +1,5 @@
-#include "denoise/deepfilternet-denoise-model.h"
 #include "denoise/denoise-model.h"
+#include "denoise/deepfilternet-denoise-model.h"
 #include "denoise/dfsmn-ans-psm-48k-denoise-model.h"
 #include "denoise/dpdfnet-denoise-model.h"
 #include "denoise/frcrn-se-16k-denoise-model.h"
@@ -20,12 +20,23 @@ bool HasExpectedTensor(Ort::Session *session, std::size_t index, bool input,
     const auto type_info =
         input ? session->GetInputTypeInfo(index) : session->GetOutputTypeInfo(index);
     const auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
-    return tensor_info.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT &&
-           tensor_info.GetShape() == expected_shape;
+    const auto actual_shape = tensor_info.GetShape();
+    if (tensor_info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT ||
+        actual_shape.size() != expected_shape.size() || actual_shape.empty()) {
+        return false;
+    }
+    for (std::size_t dimension = 1; dimension < expected_shape.size(); ++dimension) {
+        if (actual_shape[dimension] != expected_shape[dimension] && actual_shape[dimension] != -1 &&
+            expected_shape[dimension] != -1) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool HasExpectedGtcrnTensor(Ort::Session *session, std::size_t index, bool input,
-                            const std::vector<int64_t> &expected_shape) {
+                            const std::vector<int64_t> &expected_shape,
+                            std::size_t batch_dimension) {
     const auto type_info =
         input ? session->GetInputTypeInfo(index) : session->GetOutputTypeInfo(index);
     const auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
@@ -35,8 +46,10 @@ bool HasExpectedGtcrnTensor(Ort::Session *session, std::size_t index, bool input
         return false;
     }
     for (std::size_t dimension = 0; dimension < expected_shape.size(); ++dimension) {
-        if (actual_shape[dimension] != expected_shape[dimension] &&
-            actual_shape[dimension] != -1) {
+        if (dimension == batch_dimension) {
+            continue;
+        }
+        if (actual_shape[dimension] != expected_shape[dimension] && actual_shape[dimension] != -1) {
             return false;
         }
     }
@@ -49,9 +62,11 @@ bool HasExpectedGtcrnInterface(Ort::Session *session) {
         std::vector<int64_t>{ 2, 3, 1, 1, 16 }, std::vector<int64_t>{ 2, 1, 33, 16 },
         std::vector<int64_t>{ 1, 256 },         std::vector<int64_t>{ 1, 256 },
     };
+    const std::array<std::size_t, 6> batch_dimensions = { 0, 1, 3, 2, 0, 0 };
     for (std::size_t index = 0; index < shapes.size(); ++index) {
-        if (!HasExpectedGtcrnTensor(session, index, true, shapes[index]) ||
-            !HasExpectedGtcrnTensor(session, index, false, shapes[index])) {
+        if (!HasExpectedGtcrnTensor(session, index, true, shapes[index], batch_dimensions[index]) ||
+            !HasExpectedGtcrnTensor(session, index, false, shapes[index],
+                                    batch_dimensions[index])) {
             return false;
         }
     }
@@ -68,7 +83,7 @@ bool HasGtcrnMetadata(Ort::Session *session) {
 bool HasExpectedDpdfnetInterface(Ort::Session *session, std::size_t *state_size,
                                  std::size_t *hop_size) {
     const auto speech_shape = session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-    if (speech_shape.size() != 2 || speech_shape[0] != 1 || speech_shape[1] <= 0) {
+    if (speech_shape.size() != 2 || speech_shape[1] <= 0) {
         return false;
     }
     for (std::size_t index = 0; index < 3; ++index) {
@@ -77,12 +92,13 @@ bool HasExpectedDpdfnetInterface(Ort::Session *session, std::size_t *state_size,
             return false;
         }
     }
-    const auto state_in_shape =
-        session->GetInputTypeInfo(3).GetTensorTypeAndShapeInfo().GetShape();
+    const auto state_in_shape = session->GetInputTypeInfo(3).GetTensorTypeAndShapeInfo().GetShape();
     const auto state_out_shape =
         session->GetOutputTypeInfo(3).GetTensorTypeAndShapeInfo().GetShape();
-    if (state_in_shape.size() != 1 || state_in_shape != state_out_shape ||
-        state_in_shape[0] <= 0) {
+    if (state_in_shape.size() != 1 || state_in_shape[0] <= 0 || state_out_shape.size() != 1) {
+        return false;
+    }
+    if (state_out_shape[0] != state_in_shape[0] && state_out_shape[0] != -1) {
         return false;
     }
     if (session->GetInputTypeInfo(3).GetTensorTypeAndShapeInfo().GetElementType() !=
@@ -116,15 +132,7 @@ bool HasSingleWaveformIoInterface(Ort::Session *session) {
     const auto speech_shape = session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
     const auto enhanced_shape =
         session->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-    // The batch dim is declared symbolic (not a static 1) on the enhanced
-    // output because onnxsim's shape inference cannot prove it stays 1
-    // through the model's internal Squeeze/Unsqueeze ops, even though it
-    // always is at runtime (this backend never uses batch>1). Accept -1
-    // (dynamic) as well as a static 1 on both input and output.
-    if (speech_shape.size() != 2 || (speech_shape[0] != 1 && speech_shape[0] != -1)) {
-        return false;
-    }
-    if (enhanced_shape.size() != 2 || (enhanced_shape[0] != 1 && enhanced_shape[0] != -1)) {
+    if (speech_shape.size() != 2 || enhanced_shape.size() != 2) {
         return false;
     }
     return session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetElementType() ==
@@ -289,7 +297,8 @@ std::unique_ptr<DenoiseModel> DenoiseModel::create(const std::string &path, int 
     }
 
     int frcrn_sample_rate = 0;
-    if (is_frcrn_se_16k_denoise(input_names, output_names) && HasSingleWaveformIoInterface(session.get()) &&
+    if (is_frcrn_se_16k_denoise(input_names, output_names) &&
+        HasSingleWaveformIoInterface(session.get()) &&
         HasFrcrnSe16kMetadata(session.get(), &frcrn_sample_rate)) {
         auto model = std::make_unique<FrcrnSe16kDenoiseModel>();
         model->set_sample_rate(frcrn_sample_rate);

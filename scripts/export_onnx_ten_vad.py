@@ -267,7 +267,7 @@ class TenVadFrontend(nn.Module):
         )
 
     def forward(self, samples, pitch):
-        # samples: [1, 768] normalized float -> PCM scale.
+        # samples: [B, 768] normalized float -> PCM scale.
         x = samples * PCM_SCALE
 
         # Continuous pre-emphasis. Upstream carries the last sample of the
@@ -281,7 +281,7 @@ class TenVadFrontend(nn.Module):
         x = F.pad(x, (0, N_FFT - FRAME_LENGTH), mode="constant", value=0.0)
 
         spec = torch.fft.rfft(x, n=N_FFT, dim=1)
-        power = spec.real.pow(2) + spec.imag.pow(2)  # [1, 513]
+        power = spec.real.pow(2) + spec.imag.pow(2)  # [B, 513]
 
         mel = torch.matmul(power, self.mel_filters_t)  # [1, 40]
         log_mel = torch.log(mel + LOG_EPS) - self.log_power_offset
@@ -337,7 +337,7 @@ class TenVadNet(nn.Module):
         x = F.pad(x, (0, 1, 0, 0))
         x = F.relu(self.conv3_pw(self.conv3_dw(x)))
 
-        x = x.reshape(1, 16, 5).transpose(1, 2).reshape(1, 80)
+        x = x.squeeze(2).transpose(1, 2).contiguous().view(x.size(0), -1)
 
         h1_out, c1_out = self.lstm1(x, (h1, c1))
         h2_out, c2_out = self.lstm2(h1_out, (h2, c2))
@@ -471,6 +471,18 @@ def add_metadata_to_onnx(onnx_path, metadata_dict):
     print(f"Added metadata: {metadata_dict}")
 
 
+def force_input_output_batch_dim(onnx_path):
+    """Mark dim 0 of every graph input/output as a symbolic batch axis."""
+    model = onnx.load(onnx_path)
+    for value in list(model.graph.input) + list(model.graph.output):
+        dims = value.type.tensor_type.shape.dim
+        if not dims:
+            continue
+        dims[0].ClearField("dim_value")
+        dims[0].dim_param = "batch"
+    onnx.save(model, onnx_path)
+
+
 def inline_external_data(onnx_path):
     """Collapse any external weight sidecar back into the .onnx file."""
     model = onnx.load(onnx_path, load_external_data=True)
@@ -487,7 +499,7 @@ def inline_external_data(onnx_path):
 
 def simplify_onnx(onnx_path):
     model = onnx.load(onnx_path)
-    model, check = simplify(model)
+    model, check = simplify(model, dynamic_input_shape=True)
     assert check, "Simplified ONNX model could not be validated"
     onnx.save(model, onnx_path)
     print("Simplified with onnxsim")
@@ -663,10 +675,24 @@ def export_onnx(model_path, output_path, opset, skip_simplify, verify, quantize)
         output_path,
         input_names=INPUT_NAMES,
         output_names=OUTPUT_NAMES,
+        dynamic_axes={
+            "samples": {0: "batch"},
+            "pitch": {0: "batch"},
+            "h1": {0: "batch"},
+            "c1": {0: "batch"},
+            "h2": {0: "batch"},
+            "c2": {0: "batch"},
+            "cache_features": {0: "batch"},
+            "prob": {0: "batch"},
+            "h1_out": {0: "batch"},
+            "c1_out": {0: "batch"},
+            "h2_out": {0: "batch"},
+            "c2_out": {0: "batch"},
+            "cache_features_out": {0: "batch"},
+        },
         opset_version=opset,
         verbose=False,
-        # The legacy TorchScript exporter cannot lower aten::fft_rfft; the
-        # dynamo path emits a native ONNX DFT node for it.
+        # LSTMCell + dynamic batch needs the dynamo exporter.
         dynamo=True,
     )
     print(f"Exported model to: {output_path}")
@@ -675,9 +701,11 @@ def export_onnx(model_path, output_path, opset, skip_simplify, verify, quantize)
     # them back in so the model ships as one self-contained file, like every
     # other model in public/models/.
     inline_external_data(output_path)
+    force_input_output_batch_dim(output_path)
 
     if not skip_simplify:
         simplify_onnx(output_path)
+        force_input_output_batch_dim(output_path)
 
     metadata = {
         "model_type": "ten_vad",
@@ -701,6 +729,7 @@ def export_onnx(model_path, output_path, opset, skip_simplify, verify, quantize)
         if quantized_path == output_path:
             raise ValueError(f"ONNX path must end with .onnx for int8 output: {output_path}")
         quantize_onnx_model(output_path, quantized_path)
+        force_input_output_batch_dim(quantized_path)
         add_metadata_to_onnx(quantized_path, metadata)
         quantized_size = os.path.getsize(quantized_path)
         print(

@@ -466,6 +466,14 @@ def export(streaming_model: StreamingDfsmnAnsPsm48k, output_path: str, quantize:
         str(output),
         input_names=["speech", "analysis_cache", "synthesis_cache", "state_in"],
         output_names=["enhanced", "analysis_cache_out", "synthesis_cache_out", "state_out"],
+        dynamic_axes={
+            "speech": {0: "batch"},
+            "analysis_cache": {0: "batch"},
+            "synthesis_cache": {0: "batch"},
+            "enhanced": {0: "batch"},
+            "analysis_cache_out": {0: "batch"},
+            "synthesis_cache_out": {0: "batch"},
+        },
         opset_version=OPSET_VERSION,
         dynamo=False,
     )

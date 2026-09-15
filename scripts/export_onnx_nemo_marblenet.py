@@ -197,7 +197,7 @@ class NemoMelFrontend(nn.Module):
         frame_idx = torch.arange(self.n_fft, device=x.device).unsqueeze(0)
         start_idx = torch.arange(num_frames, device=x.device).unsqueeze(1) * self.hop_length
         gather_idx = (frame_idx + start_idx).reshape(-1)
-        frames = x[:, gather_idx].reshape(1, num_frames, self.n_fft)
+        frames = x[:, gather_idx].reshape(x.shape[0], num_frames, self.n_fft)
 
         windowed = frames * self.window
         spec_real = torch.matmul(windowed, self.dft_real)
@@ -237,7 +237,7 @@ class NemoMarbleNetWrapper(nn.Module):
 
     def forward(self, speech):
         feat, valid_len = self.frontend(speech)  # [1, 80, T]
-        length = torch.full((1,), valid_len, dtype=torch.int64, device=feat.device)
+        length = torch.full((feat.shape[0],), valid_len, dtype=torch.int64, device=feat.device)
         encoded, _ = self.encoder(audio_signal=feat, length=length)
         logits = self.decoder(encoded.transpose(1, 2))  # [1, num_frames, 2]
         probs = torch.softmax(logits, dim=-1)[..., 1]  # [1, num_frames]
@@ -257,7 +257,7 @@ def add_metadata_to_onnx(onnx_path, metadata_dict):
 
 def simplify_onnx(onnx_path):
     model = onnx.load(onnx_path)
-    model, check = simplify(model)
+    model, check = simplify(model, dynamic_input_shape=True)
     assert check, "Simplified ONNX model could not be validated"
     onnx.save(model, onnx_path)
     print("Simplified with onnxsim")
@@ -365,8 +365,8 @@ def export_onnx(model_path, output_path, opset, skip_simplify, verify, quantize)
         input_names=["speech"],
         output_names=["probs"],
         dynamic_axes={
-            "speech": {1: "num_samples"},
-            "probs": {1: "num_frames"},
+            "speech": {0: "batch", 1: "num_samples"},
+            "probs": {0: "batch", 1: "num_frames"},
         },
         opset_version=opset,
         verbose=False,

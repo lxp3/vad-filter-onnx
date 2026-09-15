@@ -371,9 +371,9 @@ class Mossformer2Se48kOnnxWrapper(nn.Module):
 
     def forward(self, speech):
         num_samples = speech.shape[-1]
-        x = speech[0] * self.pcm_scale  # [num_samples], PCM scale like upstream.
+        x = speech * self.pcm_scale  # [B, T], PCM scale like upstream.
 
-        fbank_feat = self.fbank(x)  # [S, 60]
+        fbank_feat = self.fbank(x[0])  # [S, 60]
         fbank_tr = fbank_feat.transpose(0, 1).unsqueeze(0)  # [1, 60, S]
         delta = self.compute_deltas(fbank_tr)
         delta2 = self.compute_deltas(delta)
@@ -384,7 +384,7 @@ class Mossformer2Se48kOnnxWrapper(nn.Module):
         mask = out_list[-1]  # [1, S, 961]
         mask = mask.transpose(1, 2)  # [1, 961, S]
 
-        real, imag = self.stft(x.unsqueeze(0))  # [1, 961, S'] each
+        real, imag = self.stft(x)  # [B, 961, S'] each
         frames = min(mask.shape[-1], real.shape[-1])
         mask = mask[:, :, :frames]
         real = real[:, :, :frames]
@@ -533,8 +533,8 @@ def export_onnx(model_dir, source_dir, output_path, opset, verify, quantize):
             input_names=["speech"],
             output_names=["enhanced"],
             dynamic_axes={
-                "speech": {1: "num_samples"},
-                "enhanced": {1: "num_samples"},
+                "speech": {0: "batch", 1: "num_samples"},
+                "enhanced": {0: "batch", 1: "num_samples"},
             },
             opset_version=opset,
             verbose=False,
