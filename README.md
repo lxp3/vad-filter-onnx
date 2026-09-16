@@ -62,6 +62,7 @@ Model architecture and implementation details are documented in [doc/vad.md](doc
 <tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/vad/pulsevad.int8.onnx"><code>pulsevad.int8.onnx</code></a></td><td align="right">1.18</td><td align="right">16000</td><td align="right">200ms</td><td align="right">100ms</td><td align="right">0.00092843</td><td align="right">no cache</td><td align="right">0.005837</td><td align="right">0.004511</td><td align="right">0.004631</td></tr>
 <tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/vad/pulsevad_81k.onnx"><code>pulsevad_81k.onnx</code></a></td><td align="right">1.47</td><td rowspan="2" valign="middle">Mel</td><td align="right">16000</td><td align="right">200ms</td><td align="right">100ms</td><td align="right">0.00000010</td><td align="right">no cache</td><td align="right">0.005705</td><td align="right">0.005592</td><td align="right">0.006015</td></tr>
 <tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/vad/pulsevad_81k.int8.onnx"><code>pulsevad_81k.int8.onnx</code></a></td><td align="right">1.27</td><td align="right">16000</td><td align="right">200ms</td><td align="right">100ms</td><td align="right">0.02077183</td><td align="right">no cache</td><td align="right">0.006635</td><td align="right">0.005748</td><td align="right">0.006808</td></tr>
+<tr><td><code>webrtc</code></td><td align="right">built-in</td><td valign="middle">GMM</td><td align="right">16000</td><td align="right">30ms</td><td align="right">30ms</td><td align="right">0</td><td align="right">no cache</td><td align="right">0.000237</td><td align="right">0.000237</td><td align="right">0.000141</td></tr>
 </tbody>
 </table>
 
@@ -166,7 +167,12 @@ int main() {
     auto handle = VadFilterOnnx::AutoVadModel::create("vad/fsmn_vad.16k.onnx");
     VadFilterOnnx::VadConfig config;
     auto vad = handle->init(config);
-    return vad ? 0 : 1;
+
+    auto webrtc = VadFilterOnnx::AutoVadModel::create_webrtc();
+    config.webrtc_vad_mode = 3;   // 0 quality .. 3 very aggressive
+    config.webrtc_frame_ms = 30;  // 10, 20, or 30
+    auto webrtc_vad = webrtc->init(config);
+    return vad && webrtc_vad ? 0 : 1;
 }
 ```
 

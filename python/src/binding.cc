@@ -180,7 +180,11 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
         .def_readwrite("left_padding_ms", &VadConfig::left_padding_ms,
                        "Padding added to start of speech in ms (default: 100)")
         .def_readwrite("right_padding_ms", &VadConfig::right_padding_ms,
-                       "Padding added to end of speech in ms (default: 100)");
+                       "Padding added to end of speech in ms (default: 100)")
+        .def_readwrite("webrtc_vad_mode", &VadConfig::webrtc_vad_mode,
+                       "WebRTC VAD aggressiveness 0-3 (default: 3)")
+        .def_readwrite("webrtc_frame_ms", &VadConfig::webrtc_frame_ms,
+                       "WebRTC VAD frame size in ms: 10, 20, or 30 (default: 30)");
 
     py::class_<AutoVadModel>(m, "AutoVadModel", "High-level VAD model API")
         .def(py::init([](const std::string &path, int num_threads, int device_id) {
@@ -197,6 +201,13 @@ PYBIND11_MODULE(vad_filter_onnx, m) {
             },
             py::arg("path"), py::arg("num_threads") = 1, py::arg("device_id") = -1,
             "Create a model handle by loading an ONNX model from the given path (Legacy static method).")
+        .def_static(
+            "create_webrtc",
+            []() {
+                py::gil_scoped_release release;
+                return AutoVadModel::create_webrtc();
+            },
+            "Create a WebRTC VAD handle. No ONNX model is loaded.")
         .def(
             "init",
             [](AutoVadModel &self, const VadConfig &config) {

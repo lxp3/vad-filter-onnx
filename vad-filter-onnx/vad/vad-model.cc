@@ -6,6 +6,7 @@
 #include "vad/pulse-vad-model.h"
 #include "vad/silero-vad-model.h"
 #include "vad/ten-vad-model.h"
+#include "vad/webrtc-vad-model.h"
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -59,6 +60,13 @@ std::unique_ptr<VadModel> VadModel::create(const std::string &path, int num_thre
     return model;
 }
 
+std::unique_ptr<VadModel> VadModel::create_webrtc() {
+    auto model = std::make_unique<WebrtcVadModel>();
+    model->type_ = VadType::WebrtcVad;
+    printf("Success to create WebrtcVad model\n");
+    return model;
+}
+
 VadModel::VadModel(const VadModel &other, const VadConfig &config, int frame_shift,
                    int frame_length)
     : type_(other.type_),
@@ -76,6 +84,14 @@ void VadModel::apply_config(const VadConfig &config) {
     config_ = config;
     configured_ = true;
     samples_per_ms_ = config.sample_rate / 1000;
+    if (samples_per_ms_ <= 0) {
+        throw std::runtime_error("sample_rate must be a positive multiple of 1000");
+    }
+    if (type_ == VadType::WebrtcVad) {
+        const int frame_samples = WebrtcVadFrameSamples(config);
+        frame_length_ = frame_samples;
+        frame_shift_ = frame_samples;
+    }
     int frame_shift_ms = frame_shift_ / samples_per_ms_;
     speech_window_size_frames_ =
         (config.speech_window_size_ms + frame_shift_ms - 1) / frame_shift_ms;
@@ -172,7 +188,8 @@ void VadModel::on_voice_end(int end_limit_samples) {
 }
 
 void VadModel::update_frame_state(float prob) {
-    bool is_speech_frame = prob > config_.threshold;
+    bool is_speech_frame =
+        type_ == VadType::WebrtcVad ? (prob > 0.5f) : (prob > config_.threshold);
     window_detector_->push(is_speech_frame);
 
     if (start_ == -1) {

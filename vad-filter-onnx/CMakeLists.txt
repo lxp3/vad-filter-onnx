@@ -11,6 +11,7 @@ file(GLOB_RECURSE SOURCES
     "include/*.cc"
 )
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-sliding-window-bit.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vad/test-webrtc-vad.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-gtcrn-denoise.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-dpdfnet-denoise.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-frcrn-se-16k-denoise.cc")
@@ -38,15 +39,18 @@ target_include_directories(vad_filter_onnx PUBLIC
 )
 
 if(BUILD_SHARED_LIBS STREQUAL "ON")
-    target_link_libraries(vad_filter_onnx PRIVATE onnxruntime)
+    target_link_libraries(vad_filter_onnx PRIVATE onnxruntime fvad)
 else()
-    target_link_libraries(vad_filter_onnx PUBLIC onnxruntime)
+    target_link_libraries(vad_filter_onnx PUBLIC onnxruntime fvad)
 endif()
 
 if(VAD_FILTER_ONNX_BUILD_TESTS)
     # Test
     add_executable(test-sliding-window-bit vad/test-sliding-window-bit.cc)
     target_link_libraries(test-sliding-window-bit PRIVATE vad_filter_onnx)
+
+    add_executable(test-webrtc-vad vad/test-webrtc-vad.cc)
+    target_link_libraries(test-webrtc-vad PRIVATE vad_filter_onnx fvad onnxruntime)
 
     add_executable(test-gtcrn-denoise denoise/test-gtcrn-denoise.cc)
     target_link_libraries(test-gtcrn-denoise PRIVATE vad_filter_onnx)

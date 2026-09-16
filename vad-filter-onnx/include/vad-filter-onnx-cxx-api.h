@@ -24,6 +24,11 @@ class AutoVadModel {
                                                 int device_id = -1);
 
     /**
+     * @brief Create a WebRTC VAD handle. No ONNX model is loaded.
+     */
+    static std::unique_ptr<AutoVadModel> create_webrtc();
+
+    /**
      * @brief Initialize a model instance for inference.
      * @param config VAD configuration.
      * @return Unique pointer to AutoVadModel instance.

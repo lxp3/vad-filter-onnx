@@ -35,6 +35,8 @@ struct VadConfig {
     int max_speech_ms = 10000;             // max speech duration per segment
     int left_padding_ms = 100;             // padding for speech start
     int right_padding_ms = 100;            // padding for speech end
+    int webrtc_vad_mode = 3;               // 0 quality .. 3 very aggressive
+    int webrtc_frame_ms = 30;              // 10, 20, or 30
 };
 
 } // namespace VadFilterOnnx

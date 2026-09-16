@@ -34,6 +34,19 @@ std::unique_ptr<AutoVadModel> AutoVadModel::create(const std::string &path, int 
     return std::move(api_model);
 }
 
+std::unique_ptr<AutoVadModel> AutoVadModel::create_webrtc() {
+    auto model = VadModel::create_webrtc();
+    if (!model) {
+        return nullptr;
+    }
+    struct AutoVadModelPublic : public AutoVadModel {
+        AutoVadModelPublic() : AutoVadModel() {}
+    };
+    auto api_model = std::make_unique<AutoVadModelPublic>();
+    api_model->impl_->internal_model_ = std::move(model);
+    return std::move(api_model);
+}
+
 std::unique_ptr<AutoVadModel> AutoVadModel::init(const VadConfig &config) {
     if (!impl_->internal_model_) {
         return nullptr;

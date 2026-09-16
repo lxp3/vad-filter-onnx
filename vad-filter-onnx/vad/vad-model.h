@@ -14,6 +14,7 @@ class VadModel {
     // Factory method to load shared resources (Handle)
     static std::unique_ptr<VadModel> create(const std::string &path, int num_threads = 1,
                                             int device_id = -1);
+    static std::unique_ptr<VadModel> create_webrtc();
 
     VadModel() = default;
     virtual ~VadModel() = default;

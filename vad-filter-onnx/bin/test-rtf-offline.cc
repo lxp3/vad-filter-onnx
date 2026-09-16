@@ -4,6 +4,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -37,7 +38,9 @@ void PrintUsage(const char *program) {
         << "  --silence-win-thr-ms N      silence window threshold (default: 500)\n"
         << "  --max-speech-ms N           maximum speech duration (default: 10000)\n"
         << "  --left-padding-ms N         left padding (default: 100)\n"
-        << "  --right-padding-ms N        right padding (default: 100)\n";
+        << "  --right-padding-ms N        right padding (default: 100)\n"
+        << "  --webrtc-vad-mode N         WebRTC VAD mode 0-3 (default: 3)\n"
+        << "  --webrtc-frame-ms N         WebRTC VAD frame ms 10/20/30 (default: 30)\n";
 }
 
 int ParseInteger(const std::string &value, const std::string &option) {
@@ -105,6 +108,10 @@ Options ParseArgs(int argc, char **argv) {
             options.config.left_padding_ms = ParseInteger(argv[i], arg);
         } else if (arg == "--right-padding-ms") {
             options.config.right_padding_ms = ParseInteger(argv[i], arg);
+        } else if (arg == "--webrtc-vad-mode") {
+            options.config.webrtc_vad_mode = ParseInteger(argv[i], arg);
+        } else if (arg == "--webrtc-frame-ms") {
+            options.config.webrtc_frame_ms = ParseInteger(argv[i], arg);
         } else {
             throw std::invalid_argument("unknown argument: " + arg);
         }
@@ -147,7 +154,12 @@ int main(int argc, char **argv) {
         std::vector<float> samples(options.config.sample_rate * options.audio_seconds);
         std::generate(samples.begin(), samples.end(), [&] { return distribution(generator); });
 
-        auto handle = VadFilterOnnx::AutoVadModel::create(options.model_path);
+        std::unique_ptr<VadFilterOnnx::AutoVadModel> handle;
+        if (options.model_path == "webrtc") {
+            handle = VadFilterOnnx::AutoVadModel::create_webrtc();
+        } else {
+            handle = VadFilterOnnx::AutoVadModel::create(options.model_path);
+        }
         if (!handle) {
             throw std::runtime_error("failed to load model: " + options.model_path);
         }

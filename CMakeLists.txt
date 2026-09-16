@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
-project(vad_project LANGUAGES CXX)
+project(vad_project LANGUAGES C CXX)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
@@ -51,6 +52,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Dependencies
 include(onnxruntime)
+include(libfvad)
 
 # Add subdirectories
 add_subdirectory(vad-filter-onnx)
@@ -89,12 +91,23 @@ if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
     target_include_directories(test-rtf-denoise-offline PRIVATE vad-filter-onnx/include)
 
     add_executable(test-denoise vad-filter-onnx/bin/test-denoise.cc vad-filter-onnx/bin/resample.cc)
-    target_link_libraries(test-denoise PRIVATE vad_filter_onnx)
+    target_link_libraries(test-denoise PRIVATE vad_filter_onnx Threads::Threads)
     target_include_directories(test-denoise PRIVATE vad-filter-onnx/include vad-filter-onnx/utils)
+
+    add_executable(
+        test-vad-threads
+        vad-filter-onnx/bin/test-vad-threads.cc
+        vad-filter-onnx/bin/resample.cc
+    )
+    target_link_libraries(test-vad-threads PRIVATE vad_filter_onnx Threads::Threads)
+    target_include_directories(test-vad-threads PRIVATE
+        vad-filter-onnx/include
+        vad-filter-onnx/vad
+    )
 
     # Installation
     install(TARGETS test-vad-online-decode test-rtf-online test-rtf-offline
-        test-rtf-denoise-online test-rtf-denoise-offline test-denoise
+        test-rtf-denoise-online test-rtf-denoise-offline test-denoise test-vad-threads
         RUNTIME DESTINATION bin
     )
 endif()

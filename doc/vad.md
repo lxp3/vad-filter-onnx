@@ -50,6 +50,16 @@ MarbleNet 是非因果卷积栈，没有 recurrent cache。C++ 流式封装以�
 
 PulseVAD 把 64-bin log-mel 前端打进 ONNX，输入固定 200 ms（3200 点 @ 16 kHz）波形，输出一个语音概率，没有 recurrent cache。2.1k 与 81k teacher 共用同一套 C++ 滑窗，hop 100 ms。通过 metadata `model_type=pulsevad` 识别，避免和 MarbleNet 的 `speech`/`probs` 接口撞车。
 
+## WebRTC VAD
+
+WebRTC VAD 不是 ONNX 模型，而是通过 CMake FetchContent 拉取的 [libfvad](https://github.com/dpirch/libfvad)（WebRTC GMM VAD）。使用 `AutoVadModel::create_webrtc()` 创建，CLI 可用 `--model-path webrtc`。
+
+```text
+float PCM -> int16 (x * 32768, saturate) -> fvad_process -> 0/1
+```
+
+约束：采样率 8/16/32/48 kHz；帧长 10/20/30 ms，且 hop 等于帧长。`VadConfig.webrtc_vad_mode` 为 0–3（越大越激进，默认 3），`webrtc_frame_ms` 默认 30。帧判决忽略 `threshold`，仍走项目统一的 speech/silence 滑窗。`setup_config` 可改 mode 和帧长，不能改 `sample_rate`。
+
 ## 验证方法
 
-FireRed/FSMN 使用固定随机种子、零初始化 cache 的 PyTorch 对照；TEN-VAD 对照上游 TensorFlow/ONNX 图；MarbleNet / PulseVAD 对照对应的窗口推理结果。RTF 使用 Intel Xeon Silver 4316，5 次 warmup、20 次测量。
+FireRed/FSMN 使用固定随机种子、零初始化 cache 的 PyTorch 对照；TEN-VAD 对照上游 TensorFlow/ONNX 图；MarbleNet / PulseVAD 对照对应的窗口推理结果；WebRTC VAD 对照同一 int16 帧上的 libfvad `fvad_process`。RTF 使用 Intel Xeon Silver 4316，5 次 warmup、20 次测量。

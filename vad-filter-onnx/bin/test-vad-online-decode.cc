@@ -22,7 +22,7 @@ static void print_usage(char **argv) {
     fprintf(stderr, "Usage: %s [options]\n\n", argv[0]);
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h, --help            print this help message and exit\n");
-    fprintf(stderr, "  --model-path PATH     path to ONNX model (required)\n");
+    fprintf(stderr, "  --model-path PATH     path to ONNX model, or webrtc (required)\n");
     fprintf(stderr, "  --wav-path PATH       path to input WAV file (required)\n");
     fprintf(stderr, "  --sample-rate RATE    input WAV sample rate (default: 16000)\n");
     fprintf(stderr, "  --threshold THR       VAD threshold (default: 0.4)\n");
@@ -34,6 +34,8 @@ static void print_usage(char **argv) {
     fprintf(stderr, "  --max-speech-ms MS    max speech duration in milliseconds (default: 10000)\n");
     fprintf(stderr, "  --left-padding-ms MS  left padding in milliseconds (default: 100)\n");
     fprintf(stderr, "  --right-padding-ms MS right padding in milliseconds (default: 100)\n");
+    fprintf(stderr, "  --webrtc-vad-mode N   WebRTC VAD mode 0-3 (default: 3)\n");
+    fprintf(stderr, "  --webrtc-frame-ms N   WebRTC VAD frame ms 10/20/30 (default: 30)\n");
 }
 
 static void parse_args(int argc, char **argv, std::string &model_path, std::string &wav_path,
@@ -67,6 +69,10 @@ static void parse_args(int argc, char **argv, std::string &model_path, std::stri
             config.left_padding_ms = std::stoi(argv[++i]);
         } else if (arg == "--right-padding-ms" && i + 1 < argc) {
             config.right_padding_ms = std::stoi(argv[++i]);
+        } else if (arg == "--webrtc-vad-mode" && i + 1 < argc) {
+            config.webrtc_vad_mode = std::stoi(argv[++i]);
+        } else if (arg == "--webrtc-frame-ms" && i + 1 < argc) {
+            config.webrtc_frame_ms = std::stoi(argv[++i]);
         } else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage(argv);
@@ -180,7 +186,12 @@ int main(int argc, char *argv[]) {
     }
 
     // 1. Create model handle (shared resources) using AutoVadModel API
-    std::unique_ptr<AutoVadModel> handle = AutoVadModel::create(model_path);
+    std::unique_ptr<AutoVadModel> handle;
+    if (model_path == "webrtc") {
+        handle = AutoVadModel::create_webrtc();
+    } else {
+        handle = AutoVadModel::create(model_path);
+    }
     if (!handle) {
         std::cerr << "Failed to create VAD model handle" << std::endl;
         return 1;
