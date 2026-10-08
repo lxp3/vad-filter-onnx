@@ -81,8 +81,10 @@ int main(int argc, char **argv) {
                         model->reset();
                         auto output =
                             model->decode(samples.data(), static_cast<int>(samples.size()), true);
-                        fs::path target =
-                            fs::path(options.output_dir) / (files[index].first + ".wav");
+                        const auto &key = files[index].first;
+                        fs::path target = fs::path(options.output_dir) / key;
+                        if (target.extension() != ".wav")
+                            target += ".wav";
                         fs::create_directories(target.parent_path());
                         VadBin::SaveWav(target, output, options.sample_rate);
                     } catch (const std::exception &error) {

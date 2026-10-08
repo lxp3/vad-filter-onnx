@@ -167,19 +167,19 @@ std::vector<std::pair<std::string, fs::path> > CollectAudio(const fs::path &path
         return extension == ".wav";
     };
     auto add = [&](const fs::path &file, const std::string &id) {
-        std::string key = id.empty() ? file.stem().string() : id;
+        std::string key = id.empty() ? file.filename().string() : id;
         std::replace_if(
             key.begin(), key.end(), [](unsigned char character) { return std::isspace(character); },
             '_');
         result.emplace_back(key, file);
     };
     if (fs::is_regular_file(path) && is_wav(path)) {
-        add(path, path.stem().string());
+        add(path, path.filename().string());
     } else if (fs::is_directory(path)) {
         for (const auto &entry : fs::recursive_directory_iterator(path)) {
             if (entry.is_regular_file() && is_wav(entry.path()))
                 add(entry.path(),
-                    fs::relative(entry.path(), path).replace_extension().generic_string());
+                    fs::relative(entry.path(), path).generic_string());
         }
         std::sort(result.begin(), result.end());
     } else {
