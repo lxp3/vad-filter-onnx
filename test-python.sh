@@ -1,8 +1,8 @@
 #! /bin/bash
 
 
-stage=$1
-build_dir=${2:-build_shared}
+stage=${1:-1}
+build_dir=${2:-build}
 
 export PYTHONPATH=$(pwd)/${build_dir}/python:${PYTHONPATH}
 
@@ -10,7 +10,7 @@ export PYTHONPATH=$(pwd)/${build_dir}/python:${PYTHONPATH}
 # wav_path=public/TownTheme.wav
 #audio_path="public/6666.09-59-02.c79b9f1c-c613-41d0-8e02-94e89ca3bca4.wav"
 #wav_path="public/zh.wav/6666.09-59-02.c79b9f1c-c613-41d0-8e02-94e89ca3bca4.16k.wav"
-audio_path="70a0c1e9-bb6e-4036-9c75-d327296701b4_8.wav"
+audio_path="d66de6f4-31f3-4208-bc24-394d8e92ca90_3.wav"
 if [ ${stage} -eq -1 ]; then
     ffmpeg -i ${audio_path} \
     -map_channel 0.0.0 \
@@ -25,16 +25,6 @@ fi
 # silero_vad_v6_onnx_path="public/models/silero_vad_16k_op15.v6.onnx"
 onnx_path="public/models/fsmn_vad.16k.onnx"
 #onnx_path="public/models/silero_vad.v4.onnx"
-if [ ${stage} -eq 0 ]; then
-    ./build_shared/test-vad-online-decode \
-        --model-path ${onnx_path} \
-        --wav-path ${audio_path} \
-        --sample-rate 8000 \
-        --threshold 0.4 \
-        --chunk-size-ms 100 \
-        --max-speech-ms 15000
-fi
-
 if [ ${stage} -eq 1 ]; then
     python3 python/tests/test-online-vad.py \
         --model-path ${onnx_path} \

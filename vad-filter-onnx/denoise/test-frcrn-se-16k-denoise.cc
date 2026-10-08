@@ -27,15 +27,18 @@ int main(int argc, char **argv) {
 
         std::mt19937 generator(20260815);
         std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-        std::vector<float> samples(sample_rate + 37);
+        std::vector<float> samples(sample_rate);
         std::generate(samples.begin(), samples.end(), [&] { return distribution(generator); });
 
-        // (a) A single decode(..., input_finished=true) over the whole
-        // buffer returns the enhanced waveform in one call.
+        // (a) A single decode(..., input_finished=true) over a 1s buffer
+        // returns the enhanced waveform in one call.
         model->reset();
         auto whole = model->decode(samples.data(), static_cast<int>(samples.size()), true);
         if (whole.empty()) {
             throw std::runtime_error("FRCRN produced no output for a finished stream");
+        }
+        if (whole.size() != samples.size()) {
+            throw std::runtime_error("FRCRN output length does not match 1s input");
         }
 
         // (b) Feeding input incrementally is fine, but no output is ever
@@ -80,6 +83,40 @@ int main(int argc, char **argv) {
         model->reset();
         if (!model->decode(nullptr, 0, true).empty()) {
             throw std::runtime_error("Empty finished FRCRN stream produced output");
+        }
+
+        // Hop-unaligned lengths must still return the original sample count.
+        model->reset();
+        const int unaligned_n = sample_rate - 37;
+        auto unaligned = model->decode(samples.data(), unaligned_n, true);
+        if (static_cast<int>(unaligned.size()) != unaligned_n) {
+            throw std::runtime_error("FRCRN did not preserve hop-unaligned length");
+        }
+
+        // (d) A single call longer than 1s is rejected.
+        model->reset();
+        std::vector<float> too_long(static_cast<std::size_t>(sample_rate) + 1, 0.0F);
+        threw = false;
+        try {
+            model->decode(too_long.data(), static_cast<int>(too_long.size()), true);
+        } catch (const std::invalid_argument &) {
+            threw = true;
+        }
+        if (!threw) {
+            throw std::runtime_error("FRCRN accepted a decode longer than 1 second");
+        }
+
+        // (e) Incremental feeding that would exceed 1s is also rejected.
+        model->reset();
+        model->decode(samples.data(), static_cast<int>(samples.size()), false);
+        threw = false;
+        try {
+            model->decode(samples.data(), 1, true);
+        } catch (const std::invalid_argument &) {
+            threw = true;
+        }
+        if (!threw) {
+            throw std::runtime_error("FRCRN accepted incremental input longer than 1 second");
         }
 
         DenoiseConfig invalid_config;

@@ -6,7 +6,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import avioflow
-import soundfile as sf
 from vad_filter_onnx import AutoVadModel, VadConfig
 
 SAMPLE_RATE = 16000
@@ -57,7 +56,7 @@ def create_vad_config(threshold):
 
 
 def avioflow_load_audio(path):
-    _, data = avioflow.load(path, output_sample_rate=SAMPLE_RATE)
+    _, data = avioflow.load(path, output_sample_rate=SAMPLE_RATE, output_num_channels=1)
     return data[0]
 
 
@@ -79,13 +78,17 @@ def save_audio(save_dir, key, wav_path, start_ms, end_ms):
 
     os.makedirs(save_dir, exist_ok=True)
 
-    meta, data = avioflow.load(wav_path)
+    meta, data = avioflow.load(wav_path, output_num_channels=1)
     sample_rate = meta.sample_rate
     start = int(sample_rate * 0.001 * start_ms)
     end = int(sample_rate * 0.001 * end_ms)
     seg_data = data[0][start:end]
     savepath = f"{save_dir}/{key}.wav"
-    sf.write(savepath, seg_data, sample_rate)
+    avioflow.save(
+        savepath,
+        seg_data.reshape(1, -1),
+        avioflow.AudioWriteOptions("wav", sample_rate=sample_rate, num_channels=1),
+    )
 
 
 def decode_one(model_handle, config, item, save_dir):

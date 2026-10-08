@@ -51,6 +51,16 @@ waveform -> Vorbis STFT -> ERB features -> Conv/GRU encoder-decoder -> mask
        +<---------------- state (history, GRU, ring buffer) ----- iSTFT
 ```
 
+## hush_dfnet_16k
+
+hush_dfnet_16k 是 16 kHz 的因果 DeepFilterNet3 变体，面向背景说话人抑制。导出图把 Vorbis STFT、ERB 和指数归一化都放在 ONNX 内，外部输入是 10 ms float32 waveform hop，另加 analysis/synthesis cache 和打包 state。低频走 5 阶 deep filter，高频走 ERB mask。辅助分离头不参与增强输出。`delay_hops` 用来对齐 libdf 的算法延迟。
+
+```text
+waveform -> Vorbis STFT -> ERB / unit-norm -> Conv/GRU -> mask + deep-filter taps
+       ^                         |                              |
+       +<------------- state (history, GRU, spectrum ring) ---- iSTFT
+```
+
 ## DFSMN-ANS-PSM
 
 DFSMN-ANS 使用 120 维 Fbank 输入、9 个 causal `UniDeepFsmn` 层和 961-bin 频谱掩码。每层保存 19 帧、256 通道的历史（共 43,776 个 float），以 O(1) 每 hop 的方式运行。

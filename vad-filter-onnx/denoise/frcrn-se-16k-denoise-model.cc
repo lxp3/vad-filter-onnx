@@ -1,4 +1,5 @@
 #include "denoise/frcrn-se-16k-denoise-model.h"
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <string_view>
@@ -47,20 +48,39 @@ void FrcrnSe16kDenoiseModel::reset() {
 }
 
 std::vector<float> FrcrnSe16kDenoiseModel::forward() {
-    const std::array<int64_t, 2> speech_shape = { 1, static_cast<int64_t>(input_buffer_.size()) };
+    const std::size_t original = input_buffer_.size();
+    // STFT in the exported graph is win=40ms, hop=20ms. Lengths shorter
+    // than one window, or not hop-aligned, either fail Conv or return a
+    // truncated waveform. Pad zeros for the session, then crop back.
+    const std::size_t win = static_cast<std::size_t>(std::max(sample_rate_ * 40 / 1000, 1));
+    const std::size_t hop = static_cast<std::size_t>(std::max(sample_rate_ * 20 / 1000, 1));
+    std::size_t padded = original;
+    if (padded < win) {
+        padded = win;
+    } else if (padded % hop != 0) {
+        padded = (padded / hop + 1) * hop;
+    }
+    std::vector<float> speech = input_buffer_;
+    if (speech.size() < padded) {
+        speech.resize(padded, 0.0f);
+    }
+
+    const std::array<int64_t, 2> speech_shape = { 1, static_cast<int64_t>(speech.size()) };
     const auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
     std::vector<Ort::Value> inputs;
-    inputs.push_back(Ort::Value::CreateTensor<float>(memory_info, input_buffer_.data(),
-                                                      input_buffer_.size(), speech_shape.data(),
-                                                      speech_shape.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(memory_info, speech.data(), speech.size(),
+                                                      speech_shape.data(), speech_shape.size()));
 
     auto outputs = session_->Run(Ort::RunOptions{ nullptr }, input_names_.data(), inputs.data(),
                                  inputs.size(), output_names_.data(), output_names_.size());
     const auto out_shape = outputs[0].GetTensorTypeAndShapeInfo().GetShape();
     const std::size_t out_len = out_shape.empty() ? 0 : static_cast<std::size_t>(out_shape.back());
-    std::vector<float> enhanced(out_len);
-    std::copy_n(outputs[0].GetTensorData<float>(), out_len, enhanced.data());
+    std::vector<float> enhanced(original, 0.0f);
+    const std::size_t copy = std::min(original, out_len);
+    if (copy > 0) {
+        std::copy_n(outputs[0].GetTensorData<float>(), copy, enhanced.data());
+    }
     return enhanced;
 }
 
@@ -76,6 +96,15 @@ std::vector<float> FrcrnSe16kDenoiseModel::decode(const float *data, int n, bool
     }
 
     if (n > 0) {
+        if (sample_rate_ <= 0) {
+            throw std::runtime_error("FRCRN sample rate is not initialized");
+        }
+        const auto max_samples = static_cast<std::size_t>(sample_rate_);
+        if (static_cast<std::size_t>(n) > max_samples ||
+            input_buffer_.size() + static_cast<std::size_t>(n) > max_samples) {
+            throw std::invalid_argument("FRCRN decode input exceeds 1 second (max " +
+                                        std::to_string(max_samples) + " samples)");
+        }
         input_buffer_.insert(input_buffer_.end(), data, data + n);
     }
 

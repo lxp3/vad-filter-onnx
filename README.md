@@ -63,6 +63,8 @@ Model architecture and implementation details are documented in [doc/vad.md](doc
 <tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/vad/pulsevad_81k.onnx"><code>pulsevad_81k.onnx</code></a></td><td align="right">1.47</td><td rowspan="2" valign="middle">Mel</td><td align="right">16000</td><td align="right">200ms</td><td align="right">100ms</td><td align="right">0.00000010</td><td align="right">no cache</td><td align="right">0.005705</td><td align="right">0.005592</td><td align="right">0.006015</td></tr>
 <tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/vad/pulsevad_81k.int8.onnx"><code>pulsevad_81k.int8.onnx</code></a></td><td align="right">1.27</td><td align="right">16000</td><td align="right">200ms</td><td align="right">100ms</td><td align="right">0.02077183</td><td align="right">no cache</td><td align="right">0.006635</td><td align="right">0.005748</td><td align="right">0.006808</td></tr>
 <tr><td><code>webrtc</code></td><td align="right">built-in</td><td valign="middle">GMM</td><td align="right">16000</td><td align="right">30ms</td><td align="right">30ms</td><td align="right">0</td><td align="right">no cache</td><td align="right">0.000237</td><td align="right">0.000237</td><td align="right">0.000141</td></tr>
+<tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/denoise/hush_dfnet_16k.onnx"><code>hush_dfnet_16k.onnx</code></a></td><td align="right">9.59</td><td rowspan="2" valign="middle">STFT</td><td align="right">16000</td><td align="right">20ms</td><td align="right">10ms</td><td align="right">0.00000051</td><td align="right">0.00001526</td><td align="right">0.158115</td><td align="right">0.115479</td></tr>
+<tr><td><a href="https://huggingface.co/1024plus1/vad-filter-onnx-models/resolve/main/denoise/hush_dfnet_16k.int8.onnx"><code>hush_dfnet_16k.int8.onnx</code></a></td><td align="right">9.33</td><td align="right">16000</td><td align="right">20ms</td><td align="right">10ms</td><td align="right">0.06115964</td><td align="right">5.07952118</td><td align="right">0.178407</td><td align="right">0.146568</td></tr>
 </tbody>
 </table>
 
@@ -180,6 +182,69 @@ ONNX Runtime is downloaded automatically by default. The archive cache is kept
 under the build directory at `_deps/onnxruntime-downloads`. Override it with
 `-DVAD_FILTER_ONNX_ORT_DOWNLOAD_DIR=/path/to/cache` if needed.
 
+The build scripts use `build` as the build directory and static libraries by
+default. On Linux, `VAD_FILTER_ONNX_STATIC_CXX_RUNTIME=ON` (the default) links
+libstdc++ and libgcc statically to avoid newer `GLIBCXX` runtime requirements.
+glibc remains dynamically linked; build on the oldest supported Linux system
+to maintain glibc compatibility. Use `-DBUILD_SHARED_LIBS=ON` for shared libraries
+and `-DVAD_FILTER_ONNX_STATIC_CXX_RUNTIME=OFF` to use the system C++ runtime.
+
 If you prefer a reusable wrapper, copy `cmake/vad_filter_onnx.cmake` into your
 project, set `VAD_FILTER_ONNX_GIT_REPOSITORY` and `VAD_FILTER_ONNX_GIT_TAG`, and
 include it before linking `vad_filter_onnx::vad_filter_onnx`.
+
+### Command-line tools
+
+The examples build `vad-main`, `denoise-main`, `test-rtf-vad`, and
+`test-rtf-denoise` in `bin/`. Run each command with `--help` for all options.
+The independent `test-vad-threads` random-PCM call simulator is retained.
+
+`resample-main` resamples one WAV file to `--sample-rate` (default 16000 Hz),
+using the shared resampler in `vad-filter-onnx/utils`. WAV input is converted
+to mono and the output is saved as PCM16. Each executable owns its argument
+parsing and inference scheduling.
+
+```bash
+bin/resample-main --input-wav-path input.wav --output-wav-path output.wav --sample-rate 8000
+```
+
+```bash
+bin/vad-main --model-path public/models/fsmn_vad.16k.onnx \
+    --path public/wavs/zh.wav --num-threads 4 --output segments.scp --save-dir segments
+bin/denoise-main --model-path public/models/gtcrn.onnx \
+    --path public/wavs --output-dir denoised --num-threads 4
+bin/test-rtf-vad --model-path webrtc --mode online
+bin/test-rtf-denoise --model-path public/models/gtcrn.onnx --mode offline
+```
+
+Both main programs accept a WAV file, a directory (searched recursively), or
+a `.txt`/`.scp` list through `--path`. Lists accept one path per line or
+`ID path`; relative paths are resolved against the list directory. Existing
+paths containing spaces are accepted as a whole line. Directory inputs are
+sorted; list order is preserved. Generated IDs replace whitespace with `_`;
+duplicate IDs are rejected before processing. Nested IDs retain their directory
+structure in saved outputs.
+
+C++ audio input supports PCM16 and float32 WAV, averages channels to mono,
+and resamples to `--sample-rate` (default 16000 Hz). This option is the model
+sample rate, not the source rate. VAD processes 100 ms chunks by default;
+denoising processes whole files. Workers share the model session with one ORT
+thread and keep independent inference state. Errors are reported per file;
+other files continue processing and any failure produces a nonzero exit code.
+
+VAD writes completed segments as `ID-index start_seconds end_seconds`, in input
+order, to stdout or `--output`. `--save-dir` optionally saves speech clips.
+Denoising writes mono PCM16 WAV files under `--output-dir`. Existing files at
+the selected output paths are overwritten. Library model-loading diagnostics
+may also appear on stdout; use `--output` for a clean VAD result file.
+
+The RTF tools accept `--mode online|offline` (default online),
+`--audio-seconds` (5), `--num-warmups` (5), `--num-runs` (20), and
+`--chunk-ms` (100). They use deterministic random audio and time decoding only.
+The old separate online/offline RTF commands, `test-vad-online-decode`, and
+`test-denoise` are replaced by these commands without compatibility aliases.
+
+Project Python audio reading and saving use `avioflow`; install it in the
+Python environment before running the Python tests or audio-based export
+validation. `test-python.sh` replaces `test.sh` and runs the Python test stages;
+stage 1 is online VAD, stage 2 is offline VAD, and stage 3 is multithreaded VAD.

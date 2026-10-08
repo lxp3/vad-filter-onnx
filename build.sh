@@ -5,14 +5,10 @@ set -e
 export http_proxy="http://192.168.58.72:7890"
 export https_proxy="http://192.168.58.72:7890" 
 # Configuration
-BUILD_SHARED_LIBS="ON"
-GLIBCXX_USE_CXX11_ABI="${1:-1}"
+BUILD_SHARED_LIBS="OFF"
+GLIBCXX_USE_CXX11_ABI="${1:-0}"
 
-if [ "$BUILD_SHARED_LIBS" = "ON" ]; then
-    BUILD_DIR="build_shared"
-else
-    BUILD_DIR="build_static"
-fi
+BUILD_DIR="build"
 
 # Print configuration info
 echo -e "\033[0;36mConfiguring project ($BUILD_DIR)...\033[0m"

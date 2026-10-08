@@ -19,6 +19,7 @@ import onnx
 import onnxruntime as ort
 import torch
 import torch.nn as nn
+import avioflow
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 OPSET_VERSION = 18
@@ -864,15 +865,12 @@ def add_metadata(output_path: str, stream: StreamingDeepFilterNet, model_type: s
 
 
 def load_test_waveform(sample_rate: int, num_frames_hint: int, hop_size: int) -> torch.Tensor:
-    import torchaudio
-
     wav_path = REPO_ROOT / "public" / "wavs" / "zh.wav"
     if wav_path.exists():
-        wav, sr = torchaudio.load(str(wav_path))
-        if wav.shape[0] > 1:
-            wav = wav.mean(dim=0, keepdim=True)
-        if sr != sample_rate:
-            wav = torchaudio.functional.resample(wav, sr, sample_rate)
+        _, wav = avioflow.load(str(wav_path), output_sample_rate=sample_rate, output_num_channels=1)
+        wav = torch.from_numpy(wav)
+        if wav.shape[1] == 0:
+            raise ValueError(f"Empty audio: {wav_path}")
         min_len = num_frames_hint * hop_size
         if wav.shape[1] < min_len:
             reps = min_len // wav.shape[1] + 1

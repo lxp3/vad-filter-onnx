@@ -20,6 +20,7 @@ list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-mossformer2-s
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-resemble-enhance-denoiser-denoise.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-deepfilternet-denoise.cc")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-dfsmn-ans-psm-48k-denoise.cc")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/denoise/test-hush-denoise.cc")
 
 
 # Library
@@ -75,6 +76,9 @@ if(VAD_FILTER_ONNX_BUILD_TESTS)
 
     add_executable(test-dfsmn-ans-psm-48k-denoise denoise/test-dfsmn-ans-psm-48k-denoise.cc)
     target_link_libraries(test-dfsmn-ans-psm-48k-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(test-hush-denoise denoise/test-hush-denoise.cc)
+    target_link_libraries(test-hush-denoise PRIVATE vad_filter_onnx)
 endif()
 
 # Installation

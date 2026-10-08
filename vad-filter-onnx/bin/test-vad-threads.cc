@@ -20,7 +20,7 @@
 #include <thread>
 #include <vector>
 
-#include "resample.h"
+#include "../utils/resample.h"
 #include "vad-config.h"
 #include "vad-filter-onnx-cxx-api.h"
 

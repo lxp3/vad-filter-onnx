@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(vad_project LANGUAGES C CXX)
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_SOURCE_DIR}/bin>")
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -15,12 +17,17 @@ else()
     endif()
 endif()
 
-option(BUILD_SHARED_LIBS "Whether to build shared libraries" ON)
+option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
 option(ENABLE_GPU "Enable GPU support for ONNX Runtime" OFF)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
 option(VAD_FILTER_ONNX_BUILD_EXAMPLES "Build vad-filter-onnx example programs" ${VAD_FILTER_ONNX_IS_TOP_LEVEL})
 option(VAD_FILTER_ONNX_BUILD_TESTS "Build vad-filter-onnx test programs" ${VAD_FILTER_ONNX_IS_TOP_LEVEL})
+option(VAD_FILTER_ONNX_STATIC_CXX_RUNTIME "Statically link the GNU C++ runtime on Linux" ON)
 set(GLIBCXX_USE_CXX11_ABI "0" CACHE STRING "Value for _GLIBCXX_USE_CXX11_ABI")
+
+if(VAD_FILTER_ONNX_STATIC_CXX_RUNTIME AND UNIX AND NOT APPLE)
+    add_link_options(-static-libgcc -static-libstdc++)
+endif()
 
 if(NOT BUILD_SHARED_LIBS STREQUAL "ON" AND ENABLE_GPU STREQUAL "ON")
     message(FATAL_ERROR "ENABLE_GPU=ON is not supported when BUILD_SHARED_LIBS is not ON. Please set ENABLE_GPU=OFF or build with BUILD_SHARED_LIBS=ON.")
@@ -63,41 +70,34 @@ endif()
 
 if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
     # Binaries
-    add_executable(
-        test-vad-online-decode
-        vad-filter-onnx/bin/test-vad-online-decode.cc
-        vad-filter-onnx/bin/resample.cc
+    add_library(vad_bin_common STATIC
+        vad-filter-onnx/bin/utils.cc
+        vad-filter-onnx/utils/resample.cc
     )
-    target_link_libraries(test-vad-online-decode PRIVATE vad_filter_onnx)
-    target_include_directories(test-vad-online-decode PRIVATE
-        vad-filter-onnx/include
-        vad-filter-onnx/vad
+    target_link_libraries(vad_bin_common PUBLIC vad_filter_onnx Threads::Threads)
+    target_include_directories(vad_bin_common PUBLIC vad-filter-onnx/bin)
+    foreach(target vad-main denoise-main)
+        add_executable(${target} vad-filter-onnx/bin/${target}.cc)
+        target_link_libraries(${target} PRIVATE vad_bin_common)
+    endforeach()
+
+    add_executable(test-rtf-vad vad-filter-onnx/bin/test-rtf-vad.cc)
+    target_link_libraries(test-rtf-vad PRIVATE vad_filter_onnx)
+    add_executable(test-rtf-denoise vad-filter-onnx/bin/test-rtf-denoise.cc)
+    target_link_libraries(test-rtf-denoise PRIVATE vad_filter_onnx)
+
+    add_executable(resample-main
+        vad-filter-onnx/bin/resample-main.cc
+        vad-filter-onnx/bin/utils.cc
+        vad-filter-onnx/utils/resample.cc
     )
-
-    add_executable(test-rtf-online vad-filter-onnx/bin/test-rtf-online.cc)
-    target_link_libraries(test-rtf-online PRIVATE vad_filter_onnx)
-    target_include_directories(test-rtf-online PRIVATE vad-filter-onnx/include)
-
-    add_executable(test-rtf-offline vad-filter-onnx/bin/test-rtf-offline.cc)
-    target_link_libraries(test-rtf-offline PRIVATE vad_filter_onnx)
-    target_include_directories(test-rtf-offline PRIVATE vad-filter-onnx/include)
-
-    add_executable(test-rtf-denoise-online vad-filter-onnx/bin/test-rtf-denoise-online.cc)
-    target_link_libraries(test-rtf-denoise-online PRIVATE vad_filter_onnx)
-    target_include_directories(test-rtf-denoise-online PRIVATE vad-filter-onnx/include)
-
-    add_executable(test-rtf-denoise-offline vad-filter-onnx/bin/test-rtf-denoise-offline.cc)
-    target_link_libraries(test-rtf-denoise-offline PRIVATE vad_filter_onnx)
-    target_include_directories(test-rtf-denoise-offline PRIVATE vad-filter-onnx/include)
-
-    add_executable(test-denoise vad-filter-onnx/bin/test-denoise.cc vad-filter-onnx/bin/resample.cc)
-    target_link_libraries(test-denoise PRIVATE vad_filter_onnx Threads::Threads)
-    target_include_directories(test-denoise PRIVATE vad-filter-onnx/include vad-filter-onnx/utils)
+    target_link_libraries(resample-main PRIVATE vad_filter_onnx)
+    target_include_directories(resample-main PRIVATE vad-filter-onnx/bin)
 
     add_executable(
         test-vad-threads
         vad-filter-onnx/bin/test-vad-threads.cc
-        vad-filter-onnx/bin/resample.cc
+        vad-filter-onnx/utils/resample.cc
     )
     target_link_libraries(test-vad-threads PRIVATE vad_filter_onnx Threads::Threads)
     target_include_directories(test-vad-threads PRIVATE
@@ -106,8 +106,7 @@ if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
     )
 
     # Installation
-    install(TARGETS test-vad-online-decode test-rtf-online test-rtf-offline
-        test-rtf-denoise-online test-rtf-denoise-offline test-denoise test-vad-threads
+    install(TARGETS vad-main denoise-main test-rtf-vad test-rtf-denoise resample-main test-vad-threads
         RUNTIME DESTINATION bin
     )
 endif()

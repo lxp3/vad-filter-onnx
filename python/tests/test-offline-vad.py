@@ -38,7 +38,8 @@ def create_vad_config(threshold):
 def avioflow_load_audio(path):
     meta, data = avioflow.load(
         path,
-        output_sample_rate=SAMPLE_RATE
+        output_sample_rate=SAMPLE_RATE,
+        output_num_channels=1,
     )
     print(meta)
     return data[0]

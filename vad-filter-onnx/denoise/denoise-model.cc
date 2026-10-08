@@ -4,6 +4,7 @@
 #include "denoise/dpdfnet-denoise-model.h"
 #include "denoise/frcrn-se-16k-denoise-model.h"
 #include "denoise/gtcrn-denoise-model.h"
+#include "denoise/hush-denoise-model.h"
 #include "denoise/mossformer2-se-48k-denoise-model.h"
 #include "denoise/mossformergan-se-16k-denoise-model.h"
 #include "denoise/resemble-enhance-denoiser-denoise-model.h"
@@ -220,6 +221,32 @@ bool HasDeepfilternetMetadata(Ort::Session *session, int *sample_rate, std::size
     return *sample_rate > 0 && *state_size > 0 && *hop_size > 0;
 }
 
+bool HasHushMetadata(Ort::Session *session, int *sample_rate, std::size_t *state_size,
+                     std::size_t *hop_size, std::size_t *delay_hops) {
+    Ort::AllocatorWithDefaultOptions allocator;
+    auto model_type =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("model_type", allocator);
+    if (!model_type || std::string_view(model_type.get()) != "hush_dfnet_16k") {
+        return false;
+    }
+    auto rate_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("sample_rate", allocator);
+    auto state_size_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("state_size", allocator);
+    auto frame_shift_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("frame_shift", allocator);
+    auto delay_hops_str =
+        session->GetModelMetadata().LookupCustomMetadataMapAllocated("delay_hops", allocator);
+    if (!rate_str || !state_size_str || !frame_shift_str) {
+        return false;
+    }
+    *sample_rate = std::atoi(rate_str.get());
+    *state_size = static_cast<std::size_t>(std::atoll(state_size_str.get()));
+    *hop_size = static_cast<std::size_t>(std::atoll(frame_shift_str.get()));
+    *delay_hops = delay_hops_str ? static_cast<std::size_t>(std::atoll(delay_hops_str.get())) : 1;
+    return *sample_rate > 0 && *state_size > 0 && *hop_size > 0;
+}
+
 bool HasDfsmnAnsPsm48kMetadata(Ort::Session *session, int *sample_rate, std::size_t *state_size,
                                std::size_t *hop_size, std::size_t *delay_hops) {
     Ort::AllocatorWithDefaultOptions allocator;
@@ -359,6 +386,25 @@ std::unique_ptr<DenoiseModel> DenoiseModel::create(const std::string &path, int 
         model->set_hop_size(dfsmn_ans_psm_48k_hop_size);
         model->set_sample_rate(dfsmn_ans_psm_48k_sample_rate);
         model->set_delay_hops(dfsmn_ans_psm_48k_delay_hops);
+        model->session_ = std::move(session);
+        model->input_names_ = std::move(input_names);
+        model->output_names_ = std::move(output_names);
+        return model;
+    }
+
+    int hush_sample_rate = 0;
+    std::size_t hush_state_size = 0;
+    std::size_t hush_hop_size = 0;
+    std::size_t hush_delay_hops = 1;
+    if (is_hush_denoise(input_names, output_names) &&
+        HasExpectedDpdfnetInterface(session.get(), &hush_state_size, &hush_hop_size) &&
+        HasHushMetadata(session.get(), &hush_sample_rate, &hush_state_size, &hush_hop_size,
+                        &hush_delay_hops)) {
+        auto model = std::make_unique<HushDenoiseModel>();
+        model->set_state_size(hush_state_size);
+        model->set_hop_size(hush_hop_size);
+        model->set_sample_rate(hush_sample_rate);
+        model->set_delay_hops(hush_delay_hops);
         model->session_ = std::move(session);
         model->input_names_ = std::move(input_names);
         model->output_names_ = std::move(output_names);

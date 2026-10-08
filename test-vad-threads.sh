@@ -1,7 +1,6 @@
 #! /bin/bash
 
-vad_build_dir=${PWD}/build_shared
-bin=${vad_build_dir}/test-vad-threads
+bin=${PWD}/bin/test-vad-threads
 model_dir=${PWD}/public/models
 
 seconds=${seconds:-60}
