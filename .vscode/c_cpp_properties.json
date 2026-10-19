@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/vad-filter-onnx/include",
+                "${workspaceFolder}/vad-filter-onnx",
+                "${workspaceFolder}/vad-filter-onnx/vad",
+                "${workspaceFolder}/vad-filter-onnx/utils",
+                "${workspaceFolder}/build/_deps/onnxruntime-src/include"
+            ],
+            "compilerPath": "D:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe",
+            "windowsSdkVersion": "10.0.26100.0",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        }
+    ],
+    "version": 4
+}

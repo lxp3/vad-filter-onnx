@@ -1,0 +1,65 @@
+# VAD 模型说明
+
+README 中的 VAD 表格保留了模型大小、特征、误差和 RTF 基准；模型文件位于 [Hugging Face VAD 目录](https://huggingface.co/1024plus1/vad-filter-onnx-models/tree/main/vad)。
+
+## 统一数据流
+
+除 TEN-VAD 的音高特征外，特征提取均已导出到 ONNX 图中：
+
+```text
+PCM waveform
+    |
+    +--> framing/window --> STFT/Fbank/MelBank --> neural network --> speech probability
+    |                                                               |
+    +<------------------------- recurrent cache/state --------------+
+```
+
+## FireRedVAD
+
+FireRedVAD 使用 Fbank 特征和带缓存的流式网络。每个 hop 输入一帧，网络输出语音概率以及下一帧使用的 cache；`int8` 版本使用动态量化权重。
+
+```text
+waveform -> Fbank -> causal feature stack -> recurrent VAD head -> probability
+                                      ^                         |
+                                      +------- cache_in/out ----+
+```
+
+## FSMN-VAD
+
+FSMN-VAD 提供 8 kHz 和 16 kHz 两套模型，输入为 25 ms Fbank 帧、10 ms hop。时间记忆由 causal FSMN memory block 保存，导出后 cache 作为显式 ONNX 输入输出。
+
+## Silero VAD
+
+Silero VAD 使用 STFT 前端，v4/v5/v6 以及 `op15` 变体均保留各自的采样和窗口配置。网络是带上下文状态的序列分类器，输出概率和状态张量。
+
+## TEN-VAD
+
+TEN-VAD 的 ONNX 图接收 40 维 log-mel 特征；第 41 维是由 `utils/pitch-estimator.{h,cc}` 计算的有状态 F0。该 LPC/Viterbi 音高估计不能可靠地追踪到 ONNX，因此在图外完成。
+
+```text
+PCM -> 40-dim HTK log-mel -> ONNX TEN-VAD --+
+                                             +--> speech probability
+PCM -> LPC/Viterbi pitch (41st feature) -----+
+```
+
+## NeMo MarbleNet v2
+
+MarbleNet 是非因果卷积栈，没有 recurrent cache。C++ 流式封装以滑动窗口重复运行整段网络，并保留中间帧，因此延迟高于 FSMN/FireRed 的显式缓存方案。
+
+## PulseVAD
+
+PulseVAD 把 64-bin log-mel 前端打进 ONNX，输入固定 200 ms（3200 点 @ 16 kHz）波形，输出一个语音概率，没有 recurrent cache。2.1k 与 81k teacher 共用同一套 C++ 滑窗，hop 100 ms。通过 metadata `model_type=pulsevad` 识别，避免和 MarbleNet 的 `speech`/`probs` 接口撞车。
+
+## WebRTC VAD
+
+WebRTC VAD 不是 ONNX 模型，而是通过 CMake FetchContent 拉取的 [libfvad](https://github.com/dpirch/libfvad)（WebRTC GMM VAD）。使用 `AutoVadModel::create_webrtc()` 创建，CLI 可用 `--model-path webrtc`。
+
+```text
+float PCM -> int16 (x * 32768, saturate) -> fvad_process -> 0/1
+```
+
+约束：采样率 8/16/32/48 kHz；帧长 10/20/30 ms，且 hop 等于帧长。`VadConfig.webrtc_vad_mode` 为 0–3（越大越激进，默认 3），`webrtc_frame_ms` 默认 30。帧判决忽略 `threshold`，仍走项目统一的 speech/silence 滑窗。`setup_config` 可改 mode 和帧长，不能改 `sample_rate`。
+
+## 验证方法
+
+FireRed/FSMN 使用固定随机种子、零初始化 cache 的 PyTorch 对照；TEN-VAD 对照上游 TensorFlow/ONNX 图；MarbleNet / PulseVAD 对照对应的窗口推理结果；WebRTC VAD 对照同一 int16 帧上的 libfvad `fvad_process`。RTF 使用 Intel Xeon Silver 4316，5 次 warmup、20 次测量。

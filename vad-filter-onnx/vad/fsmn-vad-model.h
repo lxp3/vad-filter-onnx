@@ -1,0 +1,34 @@
+#pragma once
+
+#include "vad/vad-model.h"
+#include <cstdint>
+#include <vector>
+
+namespace VadFilterOnnx {
+
+bool is_fsmn_vad(const std::vector<const char *> &input_names,
+                 const std::vector<const char *> &output_names);
+
+class FsmnVadModel : public VadModel {
+  public:
+    FsmnVadModel() = default;
+    FsmnVadModel(const VadModel &other, const VadConfig &config, int fs, int fl)
+        : VadModel(other, config, fs, fl) {}
+
+    std::unique_ptr<VadModel> init(const VadConfig &config) override;
+    void init_state() override;
+    // empty forward implementation for FSMN VAD
+    float forward(float *data, int n) override { return 0.0f; };
+    std::vector<VadSegment> decode(float *data, int n, bool input_finished) override;
+
+  private:
+    VadType type_ = VadType::FsmnVad;
+    void process_logits(const std::vector<float> &logits);
+    std::vector<float> forward_frames(float *data, int n, int32_t first_p, int32_t last_p);
+    std::vector<Ort::Value> caches_;
+    static constexpr std::array<int64_t, 4> cache_shape_{ 1, 128, 19, 1 };
+    bool is_first_inference_ = true;
+    size_t reminder_offset_ = 0;
+};
+
+} // namespace VadFilterOnnx

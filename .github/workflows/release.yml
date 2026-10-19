@@ -1,0 +1,153 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+########################
+# Linux (manylinux)
+########################
+jobs:
+  build-linux:
+    name: Linux (CPU, ${{ matrix.linkage }}, ABI${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        linkage: [shared, static]
+        abi: [0, 1]
+
+    container: quay.io/pypa/manylinux_2_28_x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=${{ matrix.linkage == 'shared' && 'ON' || 'OFF' }} \
+            -DENABLE_GPU=OFF \
+            -DGLIBCXX_USE_CXX11_ABI=${{ matrix.abi }}
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Install
+        run: cmake --install build --prefix install/vad-filter-onnx
+
+      - name: Package
+        run: |
+          pkg="vad-filter-onnx-${{ github.ref_name }}-linux-cpu-${{ matrix.linkage }}-abi${{ matrix.abi }}-x64"
+          mv install/vad-filter-onnx install/$pkg
+          tar -czvf $pkg.tar.gz -C install $pkg
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-cpu-${{ matrix.linkage }}-abi${{ matrix.abi }}
+          path: vad-filter-onnx-${{ github.ref_name }}-linux-*.tar.gz
+
+
+########################
+# Windows
+########################
+  build-windows:
+    name: Windows (CPU, shared)
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DENABLE_GPU=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Install
+        run: cmake --install build --prefix install/vad-filter-onnx
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $pkg = "vad-filter-onnx-${{ github.ref_name }}-win-cpu-shared-x64"
+          mv install/vad-filter-onnx install/$pkg
+          cd install
+          7z a ../$pkg.zip $pkg/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-cpu-shared
+          path: vad-filter-onnx-${{ github.ref_name }}-win-*.zip
+
+
+########################
+# macOS
+########################
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DENABLE_GPU=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Install
+        run: cmake --install build --prefix install/vad-filter-onnx
+
+      - name: Package
+        run: |
+          pkg="vad-filter-onnx-${{ github.ref_name }}-macos-universal"
+          mv install/vad-filter-onnx install/$pkg
+          tar -czvf $pkg.tar.gz -C install $pkg
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: vad-filter-onnx-${{ github.ref_name }}-macos-*.tar.gz
+
+
+########################
+# Release
+########################
+  release:
+    name: Create Release
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

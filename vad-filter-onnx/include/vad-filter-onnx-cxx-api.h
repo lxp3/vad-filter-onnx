@@ -1,0 +1,75 @@
+#pragma once
+
+#include "vad-config.h"
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace VadFilterOnnx {
+
+/**
+ * @brief A high-level C++ API for the VAD model using the Pimpl idiom.
+ * The signatures match VadFilterOnnx::VadModel for consistency.
+ */
+class AutoVadModel {
+  public:
+    /**
+     * @brief Create a model handle (loads ONNX session).
+     * @param path Path to the ONNX model.
+     * @param num_threads Number of threads for ONNX Runtime.
+     * @param device_id Device ID (-1 for CPU, >=0 for GPU).
+     * @return Unique pointer to AutoVadModel handle.
+     */
+    static std::unique_ptr<AutoVadModel> create(const std::string &path, int num_threads = 1,
+                                                int device_id = -1);
+
+    /**
+     * @brief Create a WebRTC VAD handle. No ONNX model is loaded.
+     */
+    static std::unique_ptr<AutoVadModel> create_webrtc();
+
+    /**
+     * @brief Initialize a model instance for inference.
+     * @param config VAD configuration.
+     * @return Unique pointer to AutoVadModel instance.
+     */
+    std::unique_ptr<AutoVadModel> init(const VadConfig &config);
+
+    /**
+     * @brief Process audio data.
+     * @param data Pointer to PCM data.
+     * @param n Number of samples.
+     * @param input_finished End of stream flag.
+     * @return Detected segments.
+     */
+    std::vector<VadSegment> decode(float *data, int n, bool input_finished);
+
+    /**
+     * @brief Update VAD configuration on an initialized inference instance.
+     * @param config New VAD configuration. sample_rate must match the init config.
+     */
+    void setup_config(const VadConfig &config);
+
+    /**
+     * @brief Return the current VAD configuration.
+     */
+    VadConfig get_config() const;
+
+    void reset();
+    VadSegment flush();
+
+    ~AutoVadModel();
+
+  private:
+    AutoVadModel(); // Private constructor used by factory
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+/**
+ * @brief Get available ONNX Runtime execution providers.
+ * @return A vector of strings representing the available providers.
+ */
+std::vector<std::string> get_ort_available_providers();
+
+} // namespace VadFilterOnnx
