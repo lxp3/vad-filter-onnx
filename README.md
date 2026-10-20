@@ -145,7 +145,7 @@ The recommended way to use this project from another C++ CMake project is
 ```cmake
 include(FetchContent)
 
-set(ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
+set(VAD_FILTER_ONNX_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
 set(VAD_FILTER_ONNX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(VAD_FILTER_ONNX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
@@ -186,7 +186,7 @@ The build scripts use `build` as the build directory and static libraries by
 default. On Linux, `VAD_FILTER_ONNX_STATIC_CXX_RUNTIME=ON` (the default) links
 libstdc++ and libgcc statically to avoid newer `GLIBCXX` runtime requirements.
 glibc remains dynamically linked; build on the oldest supported Linux system
-to maintain glibc compatibility. Use `-DBUILD_SHARED_LIBS=ON` for shared libraries
+to maintain glibc compatibility. Use `-DVAD_FILTER_ONNX_BUILD_SHARED_LIBS=ON` for shared libraries
 and `-DVAD_FILTER_ONNX_STATIC_CXX_RUNTIME=OFF` to use the system C++ runtime.
 
 If you prefer a reusable wrapper, copy `cmake/vad_filter_onnx.cmake` into your

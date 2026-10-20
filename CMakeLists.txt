@@ -17,20 +17,27 @@ else()
     endif()
 endif()
 
-option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
-option(ENABLE_GPU "Enable GPU support for ONNX Runtime" OFF)
-option(ENABLE_PYTHON "Enable Python bindings" OFF)
+option(VAD_FILTER_ONNX_BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
+option(VAD_FILTER_ONNX_ENABLE_GPU "Enable GPU support for ONNX Runtime" OFF)
+option(VAD_FILTER_ONNX_ENABLE_PYTHON "Enable Python bindings" OFF)
 option(VAD_FILTER_ONNX_BUILD_EXAMPLES "Build vad-filter-onnx example programs" ${VAD_FILTER_ONNX_IS_TOP_LEVEL})
 option(VAD_FILTER_ONNX_BUILD_TESTS "Build vad-filter-onnx test programs" ${VAD_FILTER_ONNX_IS_TOP_LEVEL})
 option(VAD_FILTER_ONNX_STATIC_CXX_RUNTIME "Statically link the GNU C++ runtime on Linux" ON)
-set(GLIBCXX_USE_CXX11_ABI "0" CACHE STRING "Value for _GLIBCXX_USE_CXX11_ABI")
+# Default follows the host project's _GLIBCXX_USE_CXX11_ABI (variable or -D in CMAKE_CXX_FLAGS), else 0
+set(_vad_filter_onnx_abi_default "0")
+if(DEFINED _GLIBCXX_USE_CXX11_ABI)
+    set(_vad_filter_onnx_abi_default "${_GLIBCXX_USE_CXX11_ABI}")
+elseif(CMAKE_CXX_FLAGS MATCHES "-D_GLIBCXX_USE_CXX11_ABI=([01])")
+    set(_vad_filter_onnx_abi_default "${CMAKE_MATCH_1}")
+endif()
+set(VAD_FILTER_ONNX_GLIBCXX_USE_CXX11_ABI "${_vad_filter_onnx_abi_default}" CACHE STRING "Value for _GLIBCXX_USE_CXX11_ABI (0 or 1)")
 
 if(VAD_FILTER_ONNX_STATIC_CXX_RUNTIME AND UNIX AND NOT APPLE)
     add_link_options(-static-libgcc -static-libstdc++)
 endif()
 
-if(NOT BUILD_SHARED_LIBS STREQUAL "ON" AND ENABLE_GPU STREQUAL "ON")
-    message(FATAL_ERROR "ENABLE_GPU=ON is not supported when BUILD_SHARED_LIBS is not ON. Please set ENABLE_GPU=OFF or build with BUILD_SHARED_LIBS=ON.")
+if(NOT VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON" AND VAD_FILTER_ONNX_ENABLE_GPU STREQUAL "ON")
+    message(FATAL_ERROR "VAD_FILTER_ONNX_ENABLE_GPU=ON is not supported when VAD_FILTER_ONNX_BUILD_SHARED_LIBS is not ON. Please set VAD_FILTER_ONNX_ENABLE_GPU=OFF or build with VAD_FILTER_ONNX_BUILD_SHARED_LIBS=ON.")
 endif()
 
 # Enable Position Independent Code (PIC) for static libraries
@@ -39,7 +46,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # 修复 RuntimeLibrary 不匹配问题 (MT vs MD)
 if(MSVC)
-    if(BUILD_SHARED_LIBS STREQUAL "ON")
+    if(VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     else()
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -64,7 +71,7 @@ include(libfvad)
 # Add subdirectories
 add_subdirectory(vad-filter-onnx)
 
-if(ENABLE_PYTHON)
+if(VAD_FILTER_ONNX_ENABLE_PYTHON)
     add_subdirectory(python/src python)
 endif()
 
@@ -114,7 +121,7 @@ if(VAD_FILTER_ONNX_BUILD_EXAMPLES)
 endif()
 
 # Install ONNX Runtime shared library
-if(BUILD_SHARED_LIBS STREQUAL "ON")
+if(VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
     if(WIN32)
         file(GLOB ORT_LIBS "${ONNXRUNTIME_ROOT_DIR}/lib/*.dll")
         install(FILES ${ORT_LIBS} DESTINATION bin)

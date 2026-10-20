@@ -30,9 +30,9 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=${{ matrix.linkage == 'shared' && 'ON' || 'OFF' }} \
-            -DENABLE_GPU=OFF \
-            -DGLIBCXX_USE_CXX11_ABI=${{ matrix.abi }}
+            -DVAD_FILTER_ONNX_BUILD_SHARED_LIBS=${{ matrix.linkage == 'shared' && 'ON' || 'OFF' }} \
+            -DVAD_FILTER_ONNX_ENABLE_GPU=OFF \
+            -DVAD_FILTER_ONNX_GLIBCXX_USE_CXX11_ABI=${{ matrix.abi }}
 
       - name: Build
         run: cmake --build build -j 4
@@ -67,8 +67,8 @@ jobs:
         run: |
           cmake -B build -S . `
             -DCMAKE_BUILD_TYPE=Release `
-            -DBUILD_SHARED_LIBS=ON `
-            -DENABLE_GPU=OFF
+            -DVAD_FILTER_ONNX_BUILD_SHARED_LIBS=ON `
+            -DVAD_FILTER_ONNX_ENABLE_GPU=OFF
 
       - name: Build
         run: cmake --build build --config Release -j 4
@@ -105,8 +105,8 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=ON \
-            -DENABLE_GPU=OFF \
+            -DVAD_FILTER_ONNX_BUILD_SHARED_LIBS=ON \
+            -DVAD_FILTER_ONNX_ENABLE_GPU=OFF \
             -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
 
       - name: Build

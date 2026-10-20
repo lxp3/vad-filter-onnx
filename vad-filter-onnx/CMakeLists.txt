@@ -26,7 +26,7 @@ list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/separate/test-bs-roformer-
 
 
 # Library
-if(BUILD_SHARED_LIBS STREQUAL "ON")
+if(VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
     add_library(vad_filter_onnx SHARED ${SOURCES})
 else()
     add_library(vad_filter_onnx STATIC ${SOURCES})
@@ -34,14 +34,14 @@ endif()
 add_library(vad_filter_onnx::vad_filter_onnx ALIAS vad_filter_onnx)
 
 target_compile_features(vad_filter_onnx PUBLIC cxx_std_20)
-target_compile_definitions(vad_filter_onnx PUBLIC _GLIBCXX_USE_CXX11_ABI=${GLIBCXX_USE_CXX11_ABI})
+target_compile_definitions(vad_filter_onnx PUBLIC _GLIBCXX_USE_CXX11_ABI=${VAD_FILTER_ONNX_GLIBCXX_USE_CXX11_ABI})
 
 target_include_directories(vad_filter_onnx PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-if(BUILD_SHARED_LIBS STREQUAL "ON")
+if(VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
     target_link_libraries(vad_filter_onnx PRIVATE onnxruntime fvad)
 else()
     target_link_libraries(vad_filter_onnx PUBLIC onnxruntime fvad)
@@ -97,4 +97,14 @@ install(TARGETS vad_filter_onnx
 install(DIRECTORY include/
     DESTINATION include
     FILES_MATCHING PATTERN "*.h"
+)
+
+# Collect build artifacts into <repo>/release/{lib,include} after each build
+set(VAD_FILTER_ONNX_RELEASE_DIR "${CMAKE_SOURCE_DIR}/release" CACHE PATH "Output dir for lib/ and include/")
+add_custom_command(TARGET vad_filter_onnx POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${VAD_FILTER_ONNX_RELEASE_DIR}/lib" "${VAD_FILTER_ONNX_RELEASE_DIR}/include"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:vad_filter_onnx>" "${VAD_FILTER_ONNX_RELEASE_DIR}/lib/"
+    COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/include -DDST_DIR=${VAD_FILTER_ONNX_RELEASE_DIR}/include
+            -P "${CMAKE_SOURCE_DIR}/cmake/copy_headers.cmake"
+    VERBATIM
 )

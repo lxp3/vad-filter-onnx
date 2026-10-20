@@ -23,7 +23,7 @@ set_target_properties(vad_filter_onnx_python PROPERTIES
 )
 
 # Copy onnxruntime.dll to the same directory as the pyd file
-if(WIN32 AND BUILD_SHARED_LIBS STREQUAL "ON")
+if(WIN32 AND VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
     add_custom_command(TARGET vad_filter_onnx_python POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${ONNXRUNTIME_DLL}"
