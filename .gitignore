@@ -24,3 +24,6 @@ public/
 # Local denoise test binaries and generated sources
 /bin/
 release/
+
+# Local model files (share via release/download script)
+models/

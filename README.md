@@ -195,8 +195,9 @@ include it before linking `vad_filter_onnx::vad_filter_onnx`.
 
 ### Command-line tools
 
-The examples build `vad-main`, `denoise-main`, `test-rtf-vad`, and
-`test-rtf-denoise` in `bin/`. Run each command with `--help` for all options.
+The examples build `vad-main`, `denoise-main`, `separate-main`, `test-rtf-vad`,
+`test-rtf-denoise`, and `test-rtf-separate` in `bin/`. Run each command with
+`--help` for all options.
 The independent `test-vad-threads` random-PCM call simulator is retained.
 
 `resample-main` resamples one WAV file to `--sample-rate` (default 16000 Hz),
@@ -213,8 +214,11 @@ bin/vad-main --model-path public/models/fsmn_vad.16k.onnx \
     --path public/wavs/zh.wav --num-threads 4 --output segments.scp --save-dir segments
 bin/denoise-main --model-path public/models/gtcrn.onnx \
     --path public/wavs --output-dir denoised --num-threads 4
+bin/separate-main --model-path public/models/bs_roformer_ep317.onnx \
+    --path mix.wav --output-dir separated
 bin/test-rtf-vad --model-path webrtc --mode online
 bin/test-rtf-denoise --model-path public/models/gtcrn.onnx --mode offline
+bin/test-rtf-separate --model-path public/models/bs_roformer_ep317.onnx --audio-seconds 5
 ```
 
 Both main programs accept a WAV file, a directory (searched recursively), or
@@ -238,9 +242,12 @@ Denoising writes mono PCM16 WAV files under `--output-dir`. Existing files at
 the selected output paths are overwritten. Library model-loading diagnostics
 may also appear on stdout; use `--output` for a clean VAD result file.
 
-The RTF tools accept `--mode online|offline` (default online),
+The VAD and denoise RTF tools accept `--mode online|offline` (default online),
 `--audio-seconds` (5), `--num-warmups` (5), `--num-runs` (20), and
 `--chunk-ms` (100). They use deterministic random audio and time decoding only.
+`test-rtf-separate` is offline only: one ORT thread, the same warmup and run
+counts, stereo float PCM at 44100 Hz, and it times `BsRoformerSeparator::Separate`
+without the model load.
 The old separate online/offline RTF commands, `test-vad-online-decode`, and
 `test-denoise` are replaced by these commands without compatibility aliases.
 
@@ -248,3 +255,55 @@ Project Python audio reading and saving use `avioflow`; install it in the
 Python environment before running the Python tests or audio-based export
 validation. `test-python.sh` replaces `test.sh` and runs the Python test stages;
 stage 1 is online VAD, stage 2 is offline VAD, and stage 3 is multithreaded VAD.
+
+## Offline separation
+
+`bs_roformer_ep317` separates a whole mix into vocals and instrumental. It is
+not a streaming model and it is not registered with `DenoiseModel`. The ONNX
+file is produced locally and is not committed:
+
+```bash
+python scripts/export_onnx_bs_roformer_ep317.py \
+    --cpp-bin bin/test-bs-roformer-separate
+```
+
+The graph is one fixed chunk, float32, opset 18: input `waveform` and output
+`vocals`, both `[1, 2, 352800]`. STFT, the complex mask, and iSTFT are inside
+the graph (2048-point periodic Hann, hop 441, reflect-centered). Chunking stays
+in C++. There is no int8 build.
+
+- Sample rate 44100 Hz, stereo. Mono is copied to both channels. Extra channels
+  keep the first two. Other rates are resampled per channel with the shared
+  linear resampler; 44100 Hz input is not resampled.
+- Chunk length 352800 samples (8 s). Overlap is 4, so the step is 88200.
+  Windows are full 8 s blocks aligned to the end, without a repeated tail.
+  Weights are the symmetric Hamming window. `streaming=0`.
+- The mix is scaled down when its peak exceeds 0.9. Instrumental is that
+  normalized mix minus the vocals. Each stem is scaled to a peak of 0.9 again
+  before it is written.
+- Audio shorter than one chunk is padded with zeros on the right, run through
+  the fixed graph, and cropped. python-audio-separator instead runs a shorter
+  forward, so short files are not expected to match it.
+
+`separate-main` reads PCM16 or float32 WAV (a file or a directory) and writes
+float32 stereo `*_vocals.wav` and `*_instrumental.wav`.
+
+Measured on CPU against this ep317 checkpoint. One 8 s chunk, vocals:
+
+| Comparison | Max abs | Mean abs |
+| --- | ---: | ---: |
+| `BSRoformer.forward` vs real-DFT wrapper | 6.98e-10 | 4.39e-11 |
+| Real-DFT wrapper vs ONNX Runtime | 1.93e-08 | 3.03e-09 |
+
+Analysis bins versus `torch.stft` are looser than the waveform: real max abs
+2.29e-4, imaginary max abs 2.14e-4. The real iSTFT versus `torch.istft` is
+2.50e-6 max abs. The waveform targets (chunk below 1e-4, overlap-add below
+1e-3) are the numbers above and below, not the raw bin error.
+
+Overlap-add on 441000 samples at 44100 Hz (two chunks), Python Hamming
+accumulation versus C++, both calling this ONNX chunk:
+
+| Stem | Max abs | Mean abs |
+| --- | ---: | ---: |
+| Vocals | 3.64e-12 | 1.47e-13 |
+| Instrumental | 1.49e-08 | 1.64e-13 |
