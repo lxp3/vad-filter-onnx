@@ -102,9 +102,26 @@ install(DIRECTORY include/
 # Collect build artifacts into <repo>/release/{lib,include} after each build
 set(VAD_FILTER_ONNX_RELEASE_DIR "${CMAKE_SOURCE_DIR}/release" CACHE PATH "Output dir for lib/ and include/")
 add_custom_command(TARGET vad_filter_onnx POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${VAD_FILTER_ONNX_RELEASE_DIR}/lib" "${VAD_FILTER_ONNX_RELEASE_DIR}/include"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:vad_filter_onnx>" "${VAD_FILTER_ONNX_RELEASE_DIR}/lib/"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${VAD_FILTER_ONNX_RELEASE_DIR}/include"
     COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/include -DDST_DIR=${VAD_FILTER_ONNX_RELEASE_DIR}/include
             -P "${CMAKE_SOURCE_DIR}/cmake/copy_headers.cmake"
     VERBATIM
 )
+
+# Only shared libraries go to release/lib: libvad_filter_onnx and the onnxruntime runtime.
+# Static builds leave lib/ untouched; stale static archives are removed.
+if(VAD_FILTER_ONNX_BUILD_SHARED_LIBS STREQUAL "ON")
+    if(WIN32)
+        file(GLOB VAD_FILTER_ONNX_ORT_LIBS "${ONNXRUNTIME_ROOT_DIR}/lib/*.dll")
+    elseif(APPLE)
+        file(GLOB VAD_FILTER_ONNX_ORT_LIBS "${ONNXRUNTIME_ROOT_DIR}/lib/*.dylib")
+    else()
+        file(GLOB VAD_FILTER_ONNX_ORT_LIBS "${ONNXRUNTIME_ROOT_DIR}/lib/*.so*")
+    endif()
+    add_custom_command(TARGET vad_filter_onnx POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${VAD_FILTER_ONNX_RELEASE_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E remove -f "${VAD_FILTER_ONNX_RELEASE_DIR}/lib/libvad_filter_onnx.a"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:vad_filter_onnx>" ${VAD_FILTER_ONNX_ORT_LIBS} "${VAD_FILTER_ONNX_RELEASE_DIR}/lib/"
+        VERBATIM
+    )
+endif()

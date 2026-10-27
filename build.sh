@@ -5,7 +5,7 @@ set -e
 export http_proxy="http://192.168.58.72:7890"
 export https_proxy="http://192.168.58.72:7890" 
 # Configuration
-VAD_FILTER_ONNX_BUILD_SHARED_LIBS="OFF"
+VAD_FILTER_ONNX_BUILD_SHARED_LIBS="ON"
 VAD_FILTER_ONNX_GLIBCXX_USE_CXX11_ABI="${1:-0}"
 
 BUILD_DIR="build"
