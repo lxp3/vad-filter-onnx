@@ -30,15 +30,20 @@ bool is_silero_vad_v5(const std::vector<const char *> &input_names,
 
 namespace {
 
-// Silero V4: fixed 512-sample windows, LSTM state (h, c).
+// Silero V4: non-overlapping windows of 512 (16k) / 256 (8k) samples, LSTM state (h, c).
 class SileroV4Engine final : public FrameEngine {
   public:
     SileroV4Engine(std::shared_ptr<const OnnxModel> model, const VadConfig &config)
-        : FrameEngine(512, 512), ort_(std::move(model)), sample_rate_(config.sample_rate) {
+        : FrameEngine(window_samples(config.sample_rate), window_samples(config.sample_rate)),
+          ort_(std::move(model)),
+          sample_rate_(config.sample_rate) {
         reset_state();
     }
 
   private:
+    // The 8 kHz graph of V4 is built for 256-sample windows (its third downsample has stride 1).
+    static int window_samples(int sample_rate) { return sample_rate == 8000 ? 256 : 512; }
+
     static constexpr std::array<int64_t, 3> kShape{ 2, 1, 64 };
 
     void reset_state() override {
