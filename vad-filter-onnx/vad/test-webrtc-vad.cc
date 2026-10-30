@@ -1,5 +1,10 @@
 #include "vad-filter-onnx-cxx-api.h"
+#include "vad/vad-model.h"
 #include "vad/webrtc-vad-model.h"
+
+extern "C" {
+#include <fvad.h>
+}
 
 #include <cmath>
 #include <functional>
@@ -54,8 +59,7 @@ int main() {
     if (handle == nullptr) {
         throw std::runtime_error("create_webrtc returned null");
     }
-    auto instance = handle->init(config);
-    auto *model = static_cast<WebrtcVadModel *>(instance.get());
+    auto engine = make_webrtc_engine(config);
 
     std::unique_ptr<Fvad, FvadDeleter> ref(fvad_new());
     if (ref == nullptr) {
@@ -81,7 +85,13 @@ int main() {
             frame[static_cast<size_t>(n)] = distribution(generator);
             pcm[static_cast<size_t>(n)] = FloatToPcm16(frame[static_cast<size_t>(n)]);
         }
-        const float got = model->forward(frame.data(), frame_samples);
+        // One complete frame in, one decision out.
+        std::vector<float> decisions;
+        engine->process(frame.data(), frame_samples, false, decisions);
+        if (decisions.size() != 1) {
+            throw std::runtime_error("expected exactly one decision per frame");
+        }
+        const float got = decisions[0];
         const int expected = fvad_process(ref.get(), pcm.data(), static_cast<size_t>(frame_samples));
         if (expected < 0) {
             throw std::runtime_error("reference fvad_process failed");

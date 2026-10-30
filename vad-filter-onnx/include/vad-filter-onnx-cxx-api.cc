@@ -5,14 +5,20 @@
 
 namespace VadFilterOnnx {
 
+// An AutoVadModel is either a handle (owns `model`) or an instance (owns `stream`).
 class AutoVadModel::Impl {
   public:
-    // Handle mode: internal_model_ is the handle from VadModel::create
-    // Instance mode: internal_model_ is the instance from handle->init()
-    std::unique_ptr<VadModel> internal_model_;
+    std::unique_ptr<VadModel> model;
+    std::unique_ptr<VadStream> stream;
 
-    Impl() = default;
-    explicit Impl(std::unique_ptr<VadModel> model) : internal_model_(std::move(model)) {}
+    VadStream &require_stream(const char *what) const {
+        if (!stream) {
+            throw std::runtime_error(std::string(what) +
+                                     " is only supported on an initialized model instance "
+                                     "returned by init().");
+        }
+        return *stream;
+    }
 };
 
 AutoVadModel::AutoVadModel() : impl_(std::make_unique<Impl>()) {}
@@ -25,13 +31,11 @@ std::unique_ptr<AutoVadModel> AutoVadModel::create(const std::string &path, int 
     if (!model) {
         return nullptr;
     }
-    // Using a private constructor via a helper since std::make_unique can't access private ctor
-    struct AutoVadModelPublic : public AutoVadModel {
-        AutoVadModelPublic() : AutoVadModel() {}
-    };
-    auto api_model = std::make_unique<AutoVadModelPublic>();
-    api_model->impl_->internal_model_ = std::move(model);
-    return std::move(api_model);
+    // The constructor is private; a local class inside a member function may call it.
+    struct Creatable : AutoVadModel {};
+    auto api = std::make_unique<Creatable>();
+    api->impl_->model = std::move(model);
+    return api;
 }
 
 std::unique_ptr<AutoVadModel> AutoVadModel::create_webrtc() {
@@ -39,60 +43,48 @@ std::unique_ptr<AutoVadModel> AutoVadModel::create_webrtc() {
     if (!model) {
         return nullptr;
     }
-    struct AutoVadModelPublic : public AutoVadModel {
-        AutoVadModelPublic() : AutoVadModel() {}
-    };
-    auto api_model = std::make_unique<AutoVadModelPublic>();
-    api_model->impl_->internal_model_ = std::move(model);
-    return std::move(api_model);
+    struct Creatable : AutoVadModel {};
+    auto api = std::make_unique<Creatable>();
+    api->impl_->model = std::move(model);
+    return api;
 }
 
 std::unique_ptr<AutoVadModel> AutoVadModel::init(const VadConfig &config) {
-    if (!impl_->internal_model_) {
+    if (!impl_->model) {
         return nullptr;
     }
-    auto instance = impl_->internal_model_->init(config);
-    if (!instance) {
+    auto stream = impl_->model->init(config);
+    if (!stream) {
         return nullptr;
     }
-    struct AutoVadModelPublic : public AutoVadModel {
-        AutoVadModelPublic() : AutoVadModel() {}
-    };
-    auto api_instance = std::make_unique<AutoVadModelPublic>();
-    api_instance->impl_->internal_model_ = std::move(instance);
-    return std::move(api_instance);
+    struct Creatable : AutoVadModel {};
+    auto api = std::make_unique<Creatable>();
+    api->impl_->stream = std::move(stream);
+    return api;
 }
 
 std::vector<VadSegment> AutoVadModel::decode(float *data, int n, bool input_finished) {
-    if (!impl_->internal_model_) {
+    if (!impl_->stream) {
         return {};
     }
-    return impl_->internal_model_->decode(data, n, input_finished);
+    return impl_->stream->decode(data, n, input_finished);
 }
 
 void AutoVadModel::setup_config(const VadConfig &config) {
-    if (!impl_->internal_model_) {
-        throw std::runtime_error("Cannot setup_config on an empty AutoVadModel.");
-    }
-    impl_->internal_model_->setup_config(config);
+    impl_->require_stream("setup_config").setup_config(config);
 }
 
-VadConfig AutoVadModel::get_config() const {
-    if (!impl_->internal_model_) {
-        throw std::runtime_error("Cannot get_config on an empty AutoVadModel.");
-    }
-    return impl_->internal_model_->get_config();
-}
+VadConfig AutoVadModel::get_config() const { return impl_->require_stream("get_config").config(); }
 
 void AutoVadModel::reset() {
-    if (impl_->internal_model_) {
-        impl_->internal_model_->reset();
+    if (impl_->stream) {
+        impl_->stream->reset();
     }
 }
 
 VadSegment AutoVadModel::flush() {
-    if (impl_->internal_model_) {
-        return impl_->internal_model_->flush();
+    if (impl_->stream) {
+        return impl_->stream->flush();
     }
     return VadSegment();
 }

@@ -1,5 +1,11 @@
 #include "vad/webrtc-vad-model.h"
 
+extern "C" {
+#include <fvad.h>
+}
+#include <cstdint>
+#include <vector>
+
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -22,6 +28,61 @@ bool IsValidWebrtcSampleRate(int sample_rate) {
     return sample_rate == 8000 || sample_rate == 16000 || sample_rate == 32000 ||
            sample_rate == 48000;
 }
+
+struct FvadDeleter {
+    void operator()(Fvad *inst) const {
+        if (inst != nullptr) {
+            fvad_free(inst);
+        }
+    }
+};
+
+class WebrtcEngine final : public FrameEngine {
+  public:
+    WebrtcEngine(const VadConfig &config, int frame_samples)
+        : FrameEngine(frame_samples, frame_samples),
+          fvad_(fvad_new()),
+          sample_rate_(config.sample_rate),
+          mode_(config.webrtc_vad_mode) {
+        if (fvad_ == nullptr) {
+            throw std::runtime_error("Failed to create WebRTC VAD instance");
+        }
+        reset_state();
+    }
+
+    // fvad_process returns 0 or 1, so 0.5 separates the two whatever VadConfig::threshold is.
+    float threshold(const VadConfig &) const override { return 0.5f; }
+
+  private:
+    void reset_state() override {
+        fvad_reset(fvad_.get());
+        if (fvad_set_sample_rate(fvad_.get(), sample_rate_) != 0) {
+            throw std::runtime_error("fvad_set_sample_rate failed for " +
+                                     std::to_string(sample_rate_));
+        }
+        if (fvad_set_mode(fvad_.get(), mode_) != 0) {
+            throw std::runtime_error("fvad_set_mode failed for " + std::to_string(mode_));
+        }
+    }
+
+    float forward(float *data) override {
+        const int n = frame_length_;
+        pcm16_.resize(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            pcm16_[static_cast<size_t>(i)] = FloatToPcm16(data[i]);
+        }
+        const int decision = fvad_process(fvad_.get(), pcm16_.data(), static_cast<size_t>(n));
+        if (decision < 0) {
+            throw std::runtime_error("fvad_process rejected frame length " + std::to_string(n));
+        }
+        return decision > 0 ? 1.0f : 0.0f;
+    }
+
+    std::unique_ptr<Fvad, FvadDeleter> fvad_;
+    int sample_rate_;
+    int mode_;
+    std::vector<int16_t> pcm16_;
+};
 
 } // namespace
 
@@ -47,51 +108,8 @@ int WebrtcVadFrameSamples(const VadConfig &config) {
     return (config.sample_rate / 1000) * config.webrtc_frame_ms;
 }
 
-std::unique_ptr<VadModel> WebrtcVadModel::init(const VadConfig &config) {
-    const int frame_samples = WebrtcVadFrameSamples(config);
-    auto instance = std::make_unique<WebrtcVadModel>(*this, config, frame_samples, frame_samples);
-    instance->engine_.reset(fvad_new());
-    if (instance->engine_ == nullptr) {
-        throw std::runtime_error("Failed to create WebRTC VAD instance");
-    }
-    instance->reset();
-    return instance;
-}
-
-void WebrtcVadModel::init_state() {
-    if (engine_ == nullptr) {
-        throw std::runtime_error("WebRTC VAD engine is not initialized");
-    }
-    fvad_reset(engine_.get());
-    if (fvad_set_sample_rate(engine_.get(), config_.sample_rate) != 0) {
-        throw std::runtime_error("fvad_set_sample_rate failed for " +
-                                 std::to_string(config_.sample_rate));
-    }
-    if (fvad_set_mode(engine_.get(), config_.webrtc_vad_mode) != 0) {
-        throw std::runtime_error("fvad_set_mode failed for " +
-                                 std::to_string(config_.webrtc_vad_mode));
-    }
-}
-
-float WebrtcVadModel::forward(float *data, int n) {
-    if (engine_ == nullptr) {
-        throw std::runtime_error("WebRTC VAD engine is not initialized");
-    }
-    if (n != frame_length_) {
-        throw std::runtime_error("WebRTC VAD expected " + std::to_string(frame_length_) +
-                                 " samples, got " + std::to_string(n));
-    }
-
-    pcm16_.resize(static_cast<size_t>(n));
-    for (int i = 0; i < n; ++i) {
-        pcm16_[static_cast<size_t>(i)] = FloatToPcm16(data[i]);
-    }
-
-    const int decision = fvad_process(engine_.get(), pcm16_.data(), static_cast<size_t>(n));
-    if (decision < 0) {
-        throw std::runtime_error("fvad_process rejected frame length " + std::to_string(n));
-    }
-    return decision > 0 ? 1.0f : 0.0f;
+std::unique_ptr<VadEngine> make_webrtc_engine(const VadConfig &config) {
+    return std::make_unique<WebrtcEngine>(config, WebrtcVadFrameSamples(config));
 }
 
 } // namespace VadFilterOnnx

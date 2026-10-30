@@ -28,89 +28,94 @@ bool is_silero_vad_v5(const std::vector<const char *> &input_names,
     return false;
 }
 
-void SileroVadModelV4::init_state() {
-    if (h_state_ == nullptr) {
-        h_state_ = Ort::Value::CreateTensor<float>(allocator_, shape_.data(), shape_.size());
-        c_state_ = Ort::Value::CreateTensor<float>(allocator_, shape_.data(), shape_.size());
-    }
-    Fill<float>(&h_state_, 0.0f);
-    Fill<float>(&c_state_, 0.0f);
-}
+namespace {
 
-std::unique_ptr<VadModel> SileroVadModelV4::init(const VadConfig &config) {
-    // Silero V4 uses fixed 512 samples
-    auto instance = std::make_unique<SileroVadModelV4>(*this, config, 512, 512);
-    instance->reset();
-    return instance;
-}
-
-float SileroVadModelV4::forward(float *data, int n) {
-    auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
-    std::array<int64_t, 2> x_shape = { 1, n };
-    Ort::Value x = Ort::Value::CreateTensor(memory_info, data, n, x_shape.data(), x_shape.size());
-
-    int64_t sr_shape = 1;
-    int64_t sample_rate = static_cast<int64_t>(config_.sample_rate);
-    Ort::Value sr = Ort::Value::CreateTensor(memory_info, &sample_rate, 1, &sr_shape, 1);
-
-    std::array<Ort::Value, 4> inputs = { std::move(x), std::move(sr), std::move(h_state_),
-                                         std::move(c_state_) };
-
-    auto out = session_->Run(Ort::RunOptions{ nullptr }, input_names_.data(), inputs.data(),
-                             inputs.size(), output_names_.data(), output_names_.size());
-
-    h_state_ = std::move(out[1]);
-    c_state_ = std::move(out[2]);
-    float prob = out[0].GetTensorData<float>()[0];
-    return prob;
-}
-
-/* SileroVadModelV5 Implementation */
-
-void SileroVadModelV5::init_state() {
-    if (state_ == nullptr) {
-        state_ = Ort::Value::CreateTensor<float>(allocator_, shape_.data(), shape_.size());
-    }
-    Fill<float>(&state_, 0.0f);
-}
-
-std::unique_ptr<VadModel> SileroVadModelV5::init(const VadConfig &config) {
-    // Silero V5: shift is 256/512, length adds context (32/64)
-    int frame_shift = (config.sample_rate == 8000 ? 256 : 512);
-    int context_size = (config.sample_rate == 8000 ? 32 : 64);
-    int frame_length = frame_shift + context_size;
-    auto instance = std::make_unique<SileroVadModelV5>(*this, config, frame_shift, frame_length);
-    instance->reset();
-    return instance;
-}
-
-float SileroVadModelV5::forward(float *data, int n) {
-    auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
-    std::array<int64_t, 2> x_shape = { 1, n };
-    Ort::Value x = Ort::Value::CreateTensor(memory_info, data, n, x_shape.data(), x_shape.size());
-
-    // 使用 vector 替代 array，解决 Ort::Value 无法默认构造的问题
-    std::vector<Ort::Value> inputs;
-    inputs.reserve(input_names_.size());
-
-    // 基础输入：input 和 state
-    inputs.push_back(std::move(x));
-    inputs.push_back(std::move(state_));
-
-    // 如果模型需要采样率输入 (size 为 3)
-    if (input_names_.size() > 2) {
-        int64_t sr_shape = 1;
-        int64_t sample_rate = static_cast<int64_t>(config_.sample_rate);
-        Ort::Value sr = Ort::Value::CreateTensor(memory_info, &sample_rate, 1, &sr_shape, 1);
-        inputs.push_back(std::move(sr));
+// Silero V4: fixed 512-sample windows, LSTM state (h, c).
+class SileroV4Engine final : public FrameEngine {
+  public:
+    SileroV4Engine(std::shared_ptr<const OnnxModel> model, const VadConfig &config)
+        : FrameEngine(512, 512), ort_(std::move(model)), sample_rate_(config.sample_rate) {
+        reset_state();
     }
 
-    auto out = session_->Run(Ort::RunOptions{ nullptr }, input_names_.data(), inputs.data(),
-                             inputs.size(), output_names_.data(), output_names_.size());
+  private:
+    static constexpr std::array<int64_t, 3> kShape{ 2, 1, 64 };
 
-    state_ = std::move(out[1]);
-    float prob = out[0].GetTensorData<float>()[0];
-    return prob;
+    void reset_state() override {
+        ResetState(h_state_, ort_.allocator(), kShape);
+        ResetState(c_state_, ort_.allocator(), kShape);
+    }
+
+    float forward(float *data) override {
+        int64_t sample_rate = sample_rate_;
+        std::vector<Ort::Value> inputs;
+        inputs.reserve(4);
+        inputs.push_back(ort_.wave(data, frame_length_));
+        inputs.push_back(ort_.scalar(&sample_rate));
+        inputs.push_back(std::move(h_state_));
+        inputs.push_back(std::move(c_state_));
+
+        auto out = ort_.run(inputs);
+
+        h_state_ = std::move(out[1]);
+        c_state_ = std::move(out[2]);
+        return out[0].GetTensorData<float>()[0];
+    }
+
+    OrtRunner ort_;
+    int sample_rate_;
+    Ort::Value h_state_{ nullptr };
+    Ort::Value c_state_{ nullptr };
+};
+
+// Silero V5: shift 256/512 (8k/16k) plus 32/64 samples of context, single state tensor.
+class SileroV5Engine final : public FrameEngine {
+  public:
+    SileroV5Engine(std::shared_ptr<const OnnxModel> model, const VadConfig &config)
+        : FrameEngine(config.sample_rate == 8000 ? 256 : 512,
+                      (config.sample_rate == 8000 ? 256 : 512) +
+                          (config.sample_rate == 8000 ? 32 : 64)),
+          ort_(std::move(model)),
+          sample_rate_(config.sample_rate) {
+        reset_state();
+    }
+
+  private:
+    static constexpr std::array<int64_t, 3> kShape{ 2, 1, 128 };
+
+    void reset_state() override { ResetState(state_, ort_.allocator(), kShape); }
+
+    float forward(float *data) override {
+        // Some exports also take the sample rate as a third input.
+        int64_t sample_rate = sample_rate_;
+        std::vector<Ort::Value> inputs;
+        inputs.reserve(3);
+        inputs.push_back(ort_.wave(data, frame_length_));
+        inputs.push_back(std::move(state_));
+        if (ort_.num_inputs() > 2)
+            inputs.push_back(ort_.scalar(&sample_rate));
+
+        auto out = ort_.run(inputs);
+
+        state_ = std::move(out[1]);
+        return out[0].GetTensorData<float>()[0];
+    }
+
+    OrtRunner ort_;
+    int sample_rate_;
+    Ort::Value state_{ nullptr };
+};
+
+} // namespace
+
+std::unique_ptr<VadEngine> make_silero_v4_engine(std::shared_ptr<const OnnxModel> model,
+                                                 const VadConfig &config) {
+    return std::make_unique<SileroV4Engine>(std::move(model), config);
+}
+
+std::unique_ptr<VadEngine> make_silero_v5_engine(std::shared_ptr<const OnnxModel> model,
+                                                 const VadConfig &config) {
+    return std::make_unique<SileroV5Engine>(std::move(model), config);
 }
 
 } // namespace VadFilterOnnx

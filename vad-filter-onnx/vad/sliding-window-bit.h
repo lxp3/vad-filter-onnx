@@ -56,27 +56,11 @@ class SlidingWindowBit {
 
     // --- 连续性统计函数 ---
 
-    // 从右侧（最新进入的一侧，低位）数连续 of 0
-    size_t num_right_zeros() const {
-        if (current_size == 0)
-            return 0;
-        size_t count = 0;
-        while (count < current_size && !bit_at(count)) {
-            count++;
-        }
-        return count;
-    }
+    // 从右侧（最新进入的一侧，低位）数连续的 0
+    size_t num_right_zeros() const { return std::min(run_length(0), current_size); }
 
     // 从右侧（最新）数连续的 1
-    size_t num_right_ones() const {
-        if (current_size == 0)
-            return 0;
-        size_t count = 0;
-        while (count < current_size && bit_at(count)) {
-            count++;
-        }
-        return count;
-    }
+    size_t num_right_ones() const { return std::min(run_length(~0ULL), current_size); }
 
     // 从左侧（最旧进入的一侧）数连续 of 0
     size_t num_left_zeros() const {
@@ -132,6 +116,18 @@ class SlidingWindowBit {
     }
 
   private:
+    // Length of the run of bits equal to `fill` (all-ones or all-zeros) from bit 0 upwards.
+    size_t run_length(uint64_t fill) const {
+        size_t n = 0;
+        for (uint64_t block : window) {
+            const int run = std::countr_zero(block ^ fill);
+            n += run;
+            if (run < 64)
+                break;
+        }
+        return n;
+    }
+
     static size_t block_count(size_t size) { return (size + 63) / 64; }
 
     static uint64_t low_bits_mask(size_t bits) {
